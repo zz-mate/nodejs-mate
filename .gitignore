@@ -6,6 +6,8 @@ yarn.lock
 
 # 构建产物
 dist/
+sql/
+src/db
 build/
 out/
 public/build/
@@ -26,10 +28,8 @@ yarn-error.log*
 
 # 敏感配置/环境变量（别提交密钥！）
 .env
-.env.local
-.env.development.local
-.env.production.local
-.env.test.local
+.env.development
+.env.production
 *.pem                    # 密钥文件
 *.key                    # 密钥文件
 config/local.js          # 本地自定义配置
