@@ -1,0 +1,6 @@
+{
+  "name": "routes",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": "./index.ts"
+}

@@ -1,0 +1,13 @@
+import { Router } from 'express';
+const router = Router();
+import demoRoutes from './miniProgram/demoRoutes.ts';
+import authRoutes from './miniProgram/authRoutes.ts';
+import billRoutes from './miniProgram/billRoutes.ts';
+import budgetRoutes from './miniProgram/budgetRoutes.ts';
+import budgetCategory from './miniProgram/budgetCategory.ts';
+router.use(demoRoutes);
+router.use(authRoutes);
+router.use(billRoutes);
+router.use(budgetRoutes);
+router.use(budgetCategory);
+export default router;

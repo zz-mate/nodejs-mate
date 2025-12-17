@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext", // 编译为 ES 模块（如果用 CommonJS 则改为 CommonJS）
+    "moduleResolution": "Bundler",
+    "outDir": "./dist", // 编译输出到 dist 目录
+    "rootDir": "./src", // 源码目录
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

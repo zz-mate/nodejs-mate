@@ -1,0 +1,39 @@
+# 依赖包（核心！千万别提交）
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# 构建产物
+dist/
+build/
+out/
+public/build/
+*.zip                    # 打包后的压缩包
+# 系统临时文件
+.DS_Store                # Mac系统专属
+Thumbs.db                # Windows系统专属
+*.tmp                    # 所有.tmp临时文件
+*.swp                    # vim编辑器缓存
+*~                       # 临时备份文件
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 敏感配置/环境变量（别提交密钥！）
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+*.pem                    # 密钥文件
+*.key                    # 密钥文件
+config/local.js          # 本地自定义配置
+
+# Git本身忽略（避免递归）
+.git/                    # 不要手动加！Git默认忽略，但防误提交
+.gitignore.local         # 本地个性化忽略（不提交到团队）

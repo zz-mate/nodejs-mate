@@ -1,0 +1,16 @@
+// @ts-ignore
+import { demoList } from "../../services/miniProgram/demoService.ts";
+export const list = async () => {
+    try {
+        // @ts-ignore
+        let result = await demoList();
+        res.status(200).json({
+            code: 200,
+            message: "ok",
+            data: result
+        });
+    }
+    catch (error) {
+        res.status(403).json({ code: 403, message: "" });
+    }
+};
