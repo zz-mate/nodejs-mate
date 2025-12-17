@@ -1,0 +1,79 @@
+# ===================== 核心忽略项（必加） =====================
+# Node.js 依赖包（体积大，无需提交）
+node_modules/
+
+# TypeScript 编译产物（生产环境编译生成，无需提交）
+dist/
+build/
+out/
+
+# 环境变量文件（包含数据库密码、端口等敏感信息）
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+# npm/yarn/pnpm 锁文件（可选忽略，建议团队统一是否提交）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ===================== 开发工具/编辑器忽略项 =====================
+# VSCode 配置
+.vscode/
+.idea/          # WebStorm/IDEA 配置
+*.swp           # Vim 交换文件
+*.swo
+.DS_Store       # Mac 系统文件
+Thumbs.db       # Windows 系统文件
+
+# ===================== 日志/临时文件 =====================
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ===================== 缓存/构建缓存 =====================
+# TypeScript 缓存
+*.tsbuildinfo
+
+# Node.js 缓存
+node_cache/
+
+# ===================== 测试/覆盖率报告 =====================
+# Jest/Mocha 测试覆盖率
+coverage/
+.nyc_output/
+
+# ===================== 其他可选忽略项 =====================
+# PM2 进程管理配置（生产环境部署用，无需提交）
+ecosystem.config.js
+.pm2/
+
+# 数据库本地备份（避免提交大文件）
+*.sql
+*.sql.gz
+backup/
+
+# 编辑器自动生成的文件
+*.bak
+*.orig
+*.rej
+
+# Docker 临时文件（若用 Docker 部署）
+.dockerignore
+docker-compose.override.yml
+
+# PM2 日志和配置
+.pm2/logs/
+.pm2/pm2.log
+.pm2/pm2.pid
