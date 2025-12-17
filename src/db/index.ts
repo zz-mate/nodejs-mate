@@ -17,7 +17,12 @@ const pool = mysql.createPool(config);
 
 // 开发环境自动测试
 if (process.env.NODE_ENV === "development") {
-    console.log("1️⃣ 正在开发环境中执行数据库连接测试...");
+    console.log("🌈🌈🌈 正在 [开发环境] 中执行数据库连接测试...");
+}else if(process.env.NODE_ENV === "production") {
+    console.log("🌈🌈🌈 正在 [生产环境] 中执行数据库连接测试...");
 }
 
+
 export default pool;
+// mysql -u root -p'/)R-QeytS2rK'
+// mysql -u root -p'Root@123456'

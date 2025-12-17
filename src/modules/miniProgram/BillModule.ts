@@ -638,19 +638,19 @@ class BillModule {
 
             if (monthList.length === 0) {
                 const startDate = new Date(finalStartTime);
-                monthList.push({
-                    year: startDate.getFullYear().toString(),
-                    month: String(startDate.getMonth() + 1).padStart(2, '0'),
-                    name: `${startDate.getFullYear()}年${startDate.getMonth() + 1}月`,
-                    incomeMoney: "0.00",
-                    expendMoney: "0.00",
-                    surplusMoney: "0.00",
-                    incomeProgress: 0,
-                    expendProgress: 0,
-                    surplusProgress: 0,
-                    surplusDirection: "盈余",
-                    children: []
-                });
+                // monthList.push({
+                //     year: startDate.getFullYear().toString(),
+                //     month: String(startDate.getMonth() + 1).padStart(2, '0'),
+                //     name: `${startDate.getFullYear()}年${startDate.getMonth() + 1}月`,
+                //     incomeMoney: "0.00",
+                //     expendMoney: "0.00",
+                //     surplusMoney: "0.00",
+                //     incomeProgress: 0,
+                //     expendProgress: 0,
+                //     surplusProgress: 0,
+                //     surplusDirection: "盈余",
+                //     children: []
+                // });
             }
 
             const formattedList = {

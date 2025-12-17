@@ -1,13 +1,16 @@
 {
-  "name": "mate-nodejs-ts",
+  "name": "nodejs-mate",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+
   "scripts": {
     "build": "pnpm tsc",
     "build:watch": "pnpm tsc --watch",
-    "dev": "concurrently \"pnpm build:watch\" \"nodemon dist/main.js\"",
-    "start": "nodemon"
+    "prod": "cross-env NODE_ENV=production nodemon -r dotenv/config dist/main.js dotenv_config_path=.env.production",
+    "dev": "cross-env NODE_ENV=development nodemon -r dotenv/config src/main.js dotenv_config_path=.env.development",
+    "dev:watch": "concurrently \"pnpm build:watch\" \"cross-env NODE_ENV=development nodemon -r dotenv/config dist/main.js dotenv_config_path=.env.development\"",
+    "test": "nodemon"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +23,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
