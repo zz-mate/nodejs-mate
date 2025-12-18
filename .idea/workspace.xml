@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="🔧 chore: 修改配置文件">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
-    </list>
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="🐛 修复打包" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -21,6 +18,11 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="PREVIOUS_COMMIT_AUTHORS">
+      <list>
+        <option value="掌账 Mate &lt;101538550+zz-mate@users.noreply.github.com&gt;" />
+      </list>
+    </option>
     <option name="PUSH_TAGS">
       <GitPushTagMode>
         <option name="argument" value="--follow-tags" />
@@ -102,7 +104,7 @@
       <workItem from="1766027759887" duration="1569000" />
       <workItem from="1766030278131" duration="2193000" />
       <workItem from="1766041921830" duration="3149000" />
-      <workItem from="1766045277861" duration="917000" />
+      <workItem from="1766045277861" duration="1719000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -136,7 +138,15 @@
       <option name="project" value="LOCAL" />
       <updated>1765984908565</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="🐛 修复打包">
+      <option name="closed" value="true" />
+      <created>1766046410897</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1766046410898</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -157,7 +167,10 @@
     <MESSAGE value="git commit -m &quot; 初始化项目：搭建基础目录结构+配置.gitignore&quot;" />
     <MESSAGE value=" chore: 优化dev脚本，隔离环境配置" />
     <MESSAGE value=" chore: 修改配置文件" />
-    <option name="LAST_COMMIT_MESSAGE" value=" chore: 修改配置文件" />
+    <MESSAGE value=" chore: 修改配置文件" />
+    <MESSAGE value="Initial commit" />
+    <MESSAGE value=" 修复打包" />
+    <option name="LAST_COMMIT_MESSAGE" value=" 修复打包" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
