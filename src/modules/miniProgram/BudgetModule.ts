@@ -145,12 +145,7 @@ class BillModule {
     /**
      * 创建预算（基于 cycle_type 校验唯一性，创建后自动计算并更新实际支出）
      */
-    async create(budgetData: BudgetDbSchema): Promise<{
-        budget_id: number;
-        actual_amount: number;
-        category_bill_count: number;
-        message: string;
-    }> {
+    async create(budgetData: BudgetDbSchema): Promise<{budget_id: number;actual_amount: number;category_bill_count: number;message: string}> {
         // 提前统一计算周期结束时间（避免多处计算不一致）
         const cycleEnd = budgetData.cycle_end || this.getCycleEndByType(budgetData.cycle_type, budgetData.cycle_start);
 
@@ -273,11 +268,12 @@ class BillModule {
                       updated_at)
                      VALUES ${categoryParams.map(() => '(?, ?, ?, ?, ?, ?, ?,?, ?, ?)').join(',')} ON DUPLICATE KEY
                     UPDATE
-                        category_name = VALUES(category_name),
-                        category_amount = VALUES(category_amount),
-                        sort_order = VALUES(sort_order),
-                        is_active = VALUES(is_active),
-                        updated_at = VALUES(updated_at)`,
+                        category_name =
+                    VALUES (category_name), category_amount =
+                    VALUES (category_amount), sort_order =
+                    VALUES (sort_order), is_active =
+                    VALUES (is_active), updated_at =
+                    VALUES (updated_at)`,
                     categoryParams.flat()
                 );
                 categoryCount = (categoryResult as any).affectedRows;
@@ -351,14 +347,14 @@ class BillModule {
             try {
                 const [updateResult] = await pool.execute(
                     `UPDATE ${this.budgetTableName}
-                     SET actual_amount = ?,
+                     SET actual_amount     = ?,
                          -- 同步计算主预算的剩余百分比（保留负数，仅防护除以0）
                          remaining_percent = IF(
-                                 amount = 0,  -- 主预算金额为0时，百分比设为0
+                                 amount = 0, -- 主预算金额为0时，百分比设为0
                                  0,
-                                 ROUND(((amount - ?) / amount) * 100, 2)  -- 保留负数，无范围限制
+                                 ROUND(((amount - ?) / amount) * 100, 2) -- 保留负数，无范围限制
                                              ),
-                         updated_at = NOW()  -- 补充更新时间（可选，建议加）
+                         updated_at        = NOW() -- 补充更新时间（可选，建议加）
                      WHERE id = ?`,
                     // 参数顺序：actualAmount → 用于计算百分比的实际支出 → budgetId
                     [actualAmount, actualAmount, budgetId]
@@ -378,7 +374,9 @@ class BillModule {
                 console.error(`更新主预算实际支出SQL执行失败：`, error.message, {
                     budgetId,
                     actualAmount,
-                    sql: `UPDATE ${this.budgetTableName} SET actual_amount = ${actualAmount} WHERE id = ${budgetId}`
+                    sql: `UPDATE ${this.budgetTableName}
+                          SET actual_amount = ${actualAmount}
+                          WHERE id = ${budgetId}`
                 });
                 // 可选：抛出错误或继续执行
                 // throw new HttpError(`更新预算实际支出失败：${error.message}`, 500);
@@ -516,21 +514,21 @@ class BillModule {
     async info(userId: number, bookId: number): Promise<any> {
         const [budgetRows] = await pool.execute(
             `SELECT id
-                 FROM ${this.budgetTableName}
-                 WHERE user_id = ?
-                   AND book_id = ? LIMIT 1`,
+             FROM ${this.budgetTableName}
+             WHERE user_id = ?
+               AND book_id = ? LIMIT 1`,
             [userId, bookId]
         );
         const budgetInfo = (budgetRows as any[])[0];
-        if(!budgetInfo) {
+        if (!budgetInfo) {
             return {
                 code: 200,
                 data: {
-                    remaining_amount:"0.00",
-                    remaining_percent:100,
-                    amount:"0.00",
-                    remaining_daily_amount:0,
-                    surplus_amount:"0.00"
+                    remaining_amount: "0.00",
+                    remaining_percent: 100,
+                    amount: "0.00",
+                    remaining_daily_amount: 0,
+                    surplus_amount: "0.00"
                 },
                 message: "查询预算详情成功"
             }
@@ -673,12 +671,12 @@ class BillModule {
                        book_id,
                        budget_id,
                        -- 剩余百分比：正数 + 强制两位小数（补零），返回字符串格式（前端展示友好）
-                       FORMAT(ROUND((IFNULL(remaining_percent, 0)), 2), 2) AS remaining_percent,
+                       FORMAT(ROUND((IFNULL(remaining_percent, 0)), 2), 2)             AS remaining_percent,
                        -- 新增：剩余金额 = 预算金额 - 实际支出金额（非负处理，空值默认0）
                        IFNULL(ROUND((category_amount - category_actual_amount), 2), 0) AS remaining_amount,
                        -- 日期格式化
-                       DATE_FORMAT(IFNULL(created_at, ''), '%Y-%m-%d %H:%i:%s') AS created_at,
-                       DATE_FORMAT(IFNULL(updated_at, ''), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                       DATE_FORMAT(IFNULL(created_at, ''), '%Y-%m-%d %H:%i:%s')        AS created_at,
+                       DATE_FORMAT(IFNULL(updated_at, ''), '%Y-%m-%d %H:%i:%s')        AS updated_at,
                        -- 基础业务字段
                        category_id,
                        category_name,
@@ -690,6 +688,7 @@ class BillModule {
                 WHERE user_id = ?
                   AND book_id = ?
                   AND budget_id = ?
+                AND category_amount>0
             `;
             let queryParams = [userId, bookId, budgetId];
 

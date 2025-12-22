@@ -31,7 +31,6 @@ class BillModule {
             created_at: new Date(),
             updated_at: new Date(),
         };
-
         let result: any;
         try {
             // 2. 执行插入账单SQL
@@ -68,7 +67,7 @@ class BillModule {
             if (err.code === "ER_NO_REFERENCED_ROW_2") {
                 console.error("❌ 外键错误：账本/分类ID不存在");
             } else if (err.code === "ER_DUP_ENTRY") {
-                console.error("❌ 唯一键冲突：账单UUID已存在");
+                console.error("❌ 唯一键冲突：账单ID已存在");
             } else {
                 console.error("❌ 插入账单失败：", err.message);
             }
@@ -111,6 +110,7 @@ class BillModule {
                 //      updated_at    = NOW()
                 //  WHERE id = ?`,
                 // [totalActualAmount, budget.id]
+
                 `UPDATE ${this.budgetTableName}
                      SET actual_amount = ?,
                          -- 同步计算主预算的剩余百分比（保留负数，仅防护除以0）
@@ -135,13 +135,37 @@ class BillModule {
                 billData.category_id
             );
             // 5. 更新分类预算表的实际支出
+            const [rows] = await pool.execute(
+                `SELECT *
+             FROM ${this.budgetCategoryTableName}
+             WHERE budget_id = ? AND category_id=?  LIMIT 1`,
+                [budget.id,billData.category_id]
+            );
+
+            // @ts-ignore
+            console.log(rows[0].category_amount);
+            //--------
+            // const newCategoryActual = Math.max(0, Number(category_current_actual) - Number(deleted_amount));
+            // const categoryTotalBudget = Number(bill.category_total_budget) || 0;
+
+            // 核心修正：允许负数百分比
+
+            let categoryRemainingPercent = 0
+            // @ts-ignore
+            if (rows[0].category_amount > 0) {
+                // @ts-ignore
+                categoryRemainingPercent = Number(((rows[0].category_amount - categoryActualAmount) / rows[0].category_amount * 100).toFixed(2));
+            } else {
+                categoryRemainingPercent = 0;
+            }
             await pool.execute(
                 `UPDATE ${this.budgetCategoryTableName}
                  SET category_actual_amount = ?,
+                     remaining_percent = ?,
                      updated_at             = NOW()
                  WHERE budget_id = ?
                    AND category_id = ?`,
-                [categoryActualAmount, budget.id, billData.category_id]
+                [categoryActualAmount,categoryRemainingPercent, budget.id, billData.category_id]
             );
             console.log(`✅ 预算ID ${budget.id} 分类ID ${billData.category_id} 实际支出更新为：${categoryActualAmount}元`);
         } catch (error: any) {
@@ -151,12 +175,7 @@ class BillModule {
     }
 
     // ========== 辅助方法：根据账单时间匹配所属预算 ==========
-    private async getBudgetByBillTime(user_id: number, book_id: number, billTime: dayjs.Dayjs): Promise<{
-        id: number;
-        cycle_start: string;
-        cycle_end: string;
-        cycle_type: string
-    } | null> {
+    private async getBudgetByBillTime(user_id: number, book_id: number, billTime: dayjs.Dayjs): Promise<{id: number;cycle_start: string;cycle_end: string;cycle_type: string} | null> {
         // 构造不同周期的查询条件
         const billDate = billTime.format('YYYY-MM-DD');
         let querySql = '';
@@ -216,15 +235,12 @@ class BillModule {
 
 
 
-    async billList(
-        userId: number,
-        page?: number,
-        pageSize?: number,
-        start_time?: string,
-        end_time?: string,
-        bookId?: number,
-        type?: number | null | undefined
-    ): Promise<any> {
+    async billList(userId: number,page?: number,pageSize?: number,start_time?: string,end_time?: string,bookId?: number,type?: number | null | undefined): Promise<any> {
+        // 金额格式化工具函数
+        const formatAmount = (amount: number): string => {
+            return amount.toFixed(2);
+        };
+
         try {
             // 1. 分页参数标准化
             const validPage = Math.max(Number(page) || 1, 1);
@@ -251,10 +267,10 @@ class BillModule {
 
                 const [boundaryRows] = await pool.execute(
                     `SELECT
-          IFNULL(MIN(b.bill_time), '1970-01-01 00:00:00') AS min_time,
-          IFNULL(MAX(b.bill_time), NOW()) AS max_time
-        FROM ${this.billTableName} b
-        WHERE ${boundaryConditions.join(' AND ')}`,
+                         IFNULL(MIN(b.bill_time), '1970-01-01 00:00:00') AS min_time,
+                         IFNULL(MAX(b.bill_time), NOW()) AS max_time
+                     FROM ${this.billTableName} b
+                     WHERE ${boundaryConditions.join(' AND ')}`,
                     boundaryParams
                 );
 
@@ -424,23 +440,23 @@ class BillModule {
             const listQueryParams = [...queryParams, offsetStr, pageSizeStr];
             const [listRows] = await pool.execute(
                 `SELECT
-       b.id, b.user_id, b.amount, b.type, b.currency,
-       DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s') AS full_bill_time,
-       DATE_FORMAT(b.bill_time, '%H:%i') AS bill_time,
-       DATE_FORMAT(b.bill_time, '%Y')  AS bill_year,
-       DATE_FORMAT(b.bill_time, '%m')  AS bill_month,
-       DATE_FORMAT(b.bill_time, '%d')  AS bill_day,
-       b.tags,
-       b.remark,
-       DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
-       DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-       c.name AS category_name, c.icon AS category_icon, c.type AS category_type,
-       bo.id AS book_id, bo.name AS book_name, bo.is_default AS book_is_default
-     FROM ${this.billTableName} b
-              LEFT JOIN mate_category c ON b.category_id = c.id
-              LEFT JOIN mate_book bo ON b.book_id = bo.id
-     WHERE ${whereConditions.join(' AND ')}
-     ORDER BY b.bill_time DESC LIMIT ?, ?`,
+                     b.id, b.user_id, b.amount, b.type, b.currency,
+                     DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s') AS full_bill_time,
+                     DATE_FORMAT(b.bill_time, '%H:%i') AS bill_time,
+                     DATE_FORMAT(b.bill_time, '%Y')  AS bill_year,
+                     DATE_FORMAT(b.bill_time, '%m')  AS bill_month,
+                     DATE_FORMAT(b.bill_time, '%d')  AS bill_day,
+                     b.tags,
+                     b.remark,
+                     DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
+                     DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                     c.name AS category_name, c.icon AS category_icon, c.type AS category_type,
+                     bo.id AS book_id, bo.name AS book_name, bo.is_default AS book_is_default
+                 FROM ${this.billTableName} b
+                          LEFT JOIN mate_category c ON b.category_id = c.id
+                          LEFT JOIN mate_book bo ON b.book_id = bo.id
+                 WHERE ${whereConditions.join(' AND ')}
+                 ORDER BY b.bill_time DESC LIMIT ?, ?`,
                 listQueryParams
             );
 
@@ -478,7 +494,7 @@ class BillModule {
                     })(),
                     created_at: item.created_at || '',
                     updated_at: item.updated_at || '',
-                    singleProgress: 0, // 单个账单进度（新增：基于当前页最大值）
+                    singleProgress: 0,
                     category: {
                         name: item.category_name || '未分类',
                         icon: item.category_icon || '',
@@ -498,24 +514,8 @@ class BillModule {
             const currentPageSurplus = Number((currentPageIncome - currentPageExpend).toFixed(2));
             const listTotalSurplus = Number((listTotalIncome - listTotalExpend).toFixed(2));
 
-            // ---------------------- 核心：计算当前页收支最大值（作为100%基准） ----------------------
-            const currentPageMaxAmount = Math.max(currentPageIncome, currentPageExpend, 0);
-
-            // ---------------------- 工具函数：计算进度百分比（基于传入的最大值基准） ----------------------
-            const calculateProgress = (current: number, baseMax: number): number => {
-                if (baseMax === 0) return 0; // 兜底：最大值为0时进度为0
-                return Number(((current / baseMax) * 100).toFixed(1)); // 保留1位小数
-            };
-
-            // ---------------------- 日期分组（重点：确保children进度计算完整） ----------------------
-            const getWeekday = (year: string, month: string, day: string) => {
-                if (!year || !month || !day) return '';
-                const date = new Date(Number(year), Number(month) - 1, Number(day));
-                if (isNaN(date.getTime())) return '';
-                const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-                return weekdayMap[date.getDay()];
-            };
-
+            // ---------------------- 核心逻辑：日期分组 + 动态基准值计算 ----------------------
+            // 1. 日期分组初始化
             const dayGroupMap = new Map<string, any>();
             rawBillList.forEach(bill => {
                 if (!bill._year || !bill._month || !bill._day) return;
@@ -526,7 +526,7 @@ class BillModule {
                         year: bill._year,
                         month: bill._month,
                         day: bill._day,
-                        weekday: getWeekday(bill._year, bill._month, bill._day),
+                        weekday: '',
                         name: `${bill._month}月${bill._day}日`,
                         incomeMoney: 0,
                         expendMoney: 0,
@@ -547,34 +547,65 @@ class BillModule {
                     dayGroup.expendMoney += bill.amount;
                 }
 
-                // 计算单个账单的进度（新增：每个账单都有独立进度）
-                bill.singleProgress = calculateProgress(bill.amount, currentPageMaxAmount);
-
-                // 格式化账单并加入当日列表
+                // 暂存账单（后续更新进度）
                 const { _year, _month, _day, ...pureBill } = bill;
                 dayGroup.list.push({
                     ...pureBill,
                     amount: pureBill.amount.toFixed(2),
-                    singleProgress: pureBill.singleProgress // 确保单个账单进度返回
+                    singleProgress: 0
                 });
             });
 
-            // 二次遍历：计算日期分组（children）的进度（确保所有日期项都计算）
+            // 2. 补全星期几
+            const getWeekday = (year: string, month: string, day: string) => {
+                if (!year || !month || !day) return '';
+                const date = new Date(Number(year), Number(month) - 1, Number(day));
+                if (isNaN(date.getTime())) return '';
+                const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                return weekdayMap[date.getDay()];
+            };
             Array.from(dayGroupMap.values()).forEach(dayGroup => {
-                // 当日收入进度 = 当日收入 / 当前页最大值 * 100%
-                dayGroup.incomeProgress = calculateProgress(dayGroup.incomeMoney, currentPageMaxAmount);
-                // 当日支出进度 = 当日支出 / 当前页最大值 * 100%
-                dayGroup.expendProgress = calculateProgress(dayGroup.expendMoney, currentPageMaxAmount);
-                // 当日盈余进度 = 当日盈余绝对值 / 当前页最大值 * 100%
-                dayGroup.surplusProgress = calculateProgress(Math.abs(dayGroup.incomeMoney - dayGroup.expendMoney), currentPageMaxAmount);
-                // 当日盈余及方向
-                dayGroup.surplusMoney = Number((dayGroup.incomeMoney - dayGroup.expendMoney).toFixed(2));
-                dayGroup.surplusDirection = dayGroup.surplusMoney >= 0 ? "盈余" : "赤字";
+                dayGroup.weekday = getWeekday(dayGroup.year, dayGroup.month, dayGroup.day);
             });
 
-            // ---------------------- 月份分组 ----------------------
+            // 3. 计算全局动态基准值（收入/支出中的最大值）
+            const dayGroupList = Array.from(dayGroupMap.values());
+            const allIncome = dayGroupList.map(day => day.incomeMoney);
+            const allExpend = dayGroupList.map(day => day.expendMoney);
+            const globalMaxIncome = Math.max(...allIncome, 0); // 所有日期收入最大值
+            const globalMaxExpend = Math.max(...allExpend, 0); // 所有日期支出最大值
+            const dynamicBaseMax = Math.max(globalMaxIncome, globalMaxExpend); // 动态基准值（谁大谁是100%）
+
+            // 4. 进度计算工具函数（限制0%~100%）
+            const calculateProgress = (current: number, baseMax: number): number => {
+                if (baseMax === 0) return 0;
+                const progress = (current / baseMax) * 100;
+                // 强制进度范围：0% ≤ 进度 ≤ 100%
+                return Number(Math.min(Math.max(progress, 0), 100).toFixed(1));
+            };
+
+            // 5. 计算每日进度（基于动态基准值）
+            dayGroupList.forEach(dayGroup => {
+                // 当日收入进度（动态基准）
+                dayGroup.incomeProgress = calculateProgress(dayGroup.incomeMoney, dynamicBaseMax);
+                // 当日支出进度（动态基准）
+                dayGroup.expendProgress = calculateProgress(dayGroup.expendMoney, dynamicBaseMax);
+                // 当日盈余计算
+                dayGroup.surplusMoney = Number((dayGroup.incomeMoney - dayGroup.expendMoney).toFixed(2));
+                dayGroup.surplusDirection = dayGroup.surplusMoney >= 0 ? "盈余" : "赤字";
+                // 当日盈余进度（动态基准）
+                dayGroup.surplusProgress = calculateProgress(Math.abs(dayGroup.surplusMoney), dynamicBaseMax);
+
+                // 单个账单进度（动态基准）
+                // @ts-ignore
+                dayGroup.list.forEach(bill => {
+                    bill.singleProgress = calculateProgress(Number(bill.amount), dynamicBaseMax);
+                });
+            });
+
+            // ---------------------- 月份分组（基于动态基准值） ----------------------
             const monthGroupMap = new Map<string, any>();
-            Array.from(dayGroupMap.values()).forEach(dayGroup => {
+            dayGroupList.forEach(dayGroup => {
                 const monthKey = `${dayGroup.year}-${dayGroup.month}`;
                 if (!monthGroupMap.has(monthKey)) {
                     monthGroupMap.set(monthKey, {
@@ -588,21 +619,24 @@ class BillModule {
                         expendProgress: 0,
                         surplusProgress: 0,
                         surplusDirection: "",
-                        children: [] // children 对应日期分组
+                        children: []
                     });
                 }
                 const monthGroup = monthGroupMap.get(monthKey)!;
+
+                // 累加当月收支
                 monthGroup.incomeMoney += dayGroup.incomeMoney;
                 monthGroup.expendMoney += dayGroup.expendMoney;
 
-                // 当月进度：基于当前页最大值计算
-                monthGroup.incomeProgress = calculateProgress(monthGroup.incomeMoney, currentPageMaxAmount);
-                monthGroup.expendProgress = calculateProgress(monthGroup.expendMoney, currentPageMaxAmount);
-                monthGroup.surplusProgress = calculateProgress(Math.abs(monthGroup.incomeMoney - monthGroup.expendMoney), currentPageMaxAmount);
-
+                // 当月进度（基于动态基准值）
+                monthGroup.incomeProgress = calculateProgress(monthGroup.incomeMoney, dynamicBaseMax);
+                monthGroup.expendProgress = calculateProgress(monthGroup.expendMoney, dynamicBaseMax);
+                // 当月盈余
                 monthGroup.surplusMoney = Number((monthGroup.incomeMoney - monthGroup.expendMoney).toFixed(2));
                 monthGroup.surplusDirection = monthGroup.surplusMoney >= 0 ? "盈余" : "赤字";
-                // 将日期分组（带完整进度）加入月份children
+                monthGroup.surplusProgress = calculateProgress(Math.abs(monthGroup.surplusMoney), dynamicBaseMax);
+
+                // 加入日期分组
                 monthGroup.children.push(dayGroup);
             });
 
@@ -615,20 +649,19 @@ class BillModule {
                 incomeProgress: monthGroup.incomeProgress,
                 expendProgress: monthGroup.expendProgress,
                 surplusProgress: monthGroup.surplusProgress,
-                // 确保children（日期分组）的进度字段完整返回
+                // 格式化日期分组
                 children: monthGroup.children.map((dayGroup: any) => ({
                     ...dayGroup,
                     incomeMoney: dayGroup.incomeMoney.toFixed(2),
                     expendMoney: dayGroup.expendMoney.toFixed(2),
                     surplusMoney: dayGroup.surplusMoney.toFixed(2),
-                    incomeProgress: dayGroup.incomeProgress, // 当日收入进度
-                    expendProgress: dayGroup.expendProgress, // 当日支出进度
-                    surplusProgress: dayGroup.surplusProgress, // 当日盈余进度
-                    // 确保日期分组下的每个账单进度也返回
+                    incomeProgress: dayGroup.incomeProgress,
+                    expendProgress: dayGroup.expendProgress,
+                    surplusProgress: dayGroup.surplusProgress,
                     list: dayGroup.list.map((bill: any) => ({
                         ...bill,
                         amount: bill.amount,
-                        singleProgress: bill.singleProgress // 单个账单进度
+                        singleProgress: bill.singleProgress
                     }))
                 })).sort((a: any, b: any) => Number(b.day) - Number(a.day))
             })).sort((a, b) => {
@@ -638,6 +671,7 @@ class BillModule {
 
             if (monthList.length === 0) {
                 const startDate = new Date(finalStartTime);
+                // 空数据兜底（如需启用取消注释）
                 // monthList.push({
                 //     year: startDate.getFullYear().toString(),
                 //     month: String(startDate.getMonth() + 1).padStart(2, '0'),
@@ -676,11 +710,11 @@ class BillModule {
             total = Number((countRows as any[])[0]?.total || 0);
             const totalPage = Math.ceil(total / validPageSize);
 
-            // ---------------------- 全局进度计算（基于当前页最大值） ----------------------
-            const incomeProgress = calculateProgress(listTotalIncome, currentPageMaxAmount); // 列表总收入进度
-            const expendProgress = calculateProgress(listTotalExpend, currentPageMaxAmount); // 列表总支出进度
-            const surplusProgress = calculateProgress(Math.abs(listTotalIncome - listTotalExpend), currentPageMaxAmount); // 列表盈余进度
-            const currentPageSurplusProgress = calculateProgress(Math.abs(currentPageIncome - currentPageExpend), currentPageMaxAmount); // 当前页盈余进度
+            // ---------------------- 全局进度计算（基于动态基准值） ----------------------
+            const incomeProgress = calculateProgress(listTotalIncome, dynamicBaseMax);
+            const expendProgress = calculateProgress(listTotalExpend, dynamicBaseMax);
+            const surplusProgress = calculateProgress(Math.abs(listTotalSurplus), dynamicBaseMax);
+            const currentPageSurplusProgress = calculateProgress(Math.abs(currentPageSurplus), dynamicBaseMax);
 
             // ---------------------- 返回结果 ----------------------
             return {
@@ -710,7 +744,7 @@ class BillModule {
                     surplusProgress: surplusProgress,
                     start_time: displayStartTime,
                     end_time: displayEndTime,
-                    progressDesc: `进度基准：当前页收支最大值(${currentPageMaxAmount.toFixed(2)})=100%`,
+                    progressDesc: `进度基准：${dynamicBaseMax === globalMaxIncome ? '收入' : '支出'}最大值(${dynamicBaseMax.toFixed(2)})=100%`,
                     filterType: type === undefined || type === null ? 'all' : type,
                     emptyTip: total === 0 ? '当前筛选条件下无账单数据' : ''
                 },
@@ -742,25 +776,7 @@ class BillModule {
             return {
                 code: 500,
                 message: error.message || '查询账单失败',
-                list: {
-                    // timeRange: { start: displayStartTime, end: displayEndTime },
-                    // listType: 'month',
-                    // dataList: [
-                    //     {
-                    //         year: defaultYear.toString(),
-                    //         month: String(defaultMonth).padStart(2, '0'),
-                    //         name: `${defaultYear}年${defaultMonth}月`,
-                    //         incomeMoney: "0.00",
-                    //         expendMoney: "0.00",
-                    //         surplusMoney: "0.00",
-                    //         incomeProgress: 0,
-                    //         expendProgress: 0,
-                    //         surplusProgress: 0,
-                    //         surplusDirection: "盈余",
-                    //         children: []
-                    //     }
-                    // ]
-                },
+                list: {},
                 summary: {
                     totalIncome: "0.00",
                     totalExpend: "0.00",
@@ -923,16 +939,26 @@ class BillModule {
             } = bill;
 
             // 3.1 处理分类预算退回（有分类预算时）
+            // 3.1 处理分类预算退回（有分类预算时）
             if (category_budget_id) {
                 const newCategoryActual = Math.max(0, Number(category_current_actual) - Number(deleted_amount));
+                // 计算剩余百分比：(总预算 - 实际支出) / 总预算 * 100，保留2位小数（允许负数）
+                const categoryTotalBudget = Number(bill.category_total_budget) || 0;
+                let remainingPercent = 0;
+                if (categoryTotalBudget > 0) {
+                    // 核心修正：移除0-100的限制，保留真实百分比（支持负数）
+                    remainingPercent = Number(((categoryTotalBudget - newCategoryActual) / categoryTotalBudget * 100).toFixed(2));
+                }
+
                 await connection.execute(
                     `UPDATE mate_budget_category mbc
                      SET mbc.category_actual_amount = ?,
+                         mbc.remaining_percent = ?,  -- 新增：更新剩余百分比（支持负数）
                          mbc.updated_at             = NOW()
                      WHERE mbc.id = ?`,
-                    [newCategoryActual, category_budget_id]
+                    [newCategoryActual, remainingPercent, category_budget_id]
                 );
-                console.log("分类预算退回：", deleted_amount, "更新后实际支出：", newCategoryActual);
+                console.log("分类预算退回：", deleted_amount, "更新后实际支出：", newCategoryActual, "剩余百分比：", remainingPercent + "%");
                 budgetUpdateResult.categoryUpdated = true;
             }
 

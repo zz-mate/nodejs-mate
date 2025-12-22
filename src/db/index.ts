@@ -12,9 +12,15 @@ const config = {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '123456',
     database: process.env.DB_NAME || 'local_mate_db',
+    // 关键配置：解决超时问题
+    connectTimeout: 10000, // 连接超时时间（10秒）
+    acquireTimeout: 10000, // 获取连接超时时间（10秒）
+    timeout: 10000,        // 语句执行超时时间（10秒）
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 10,   // 连接池最大连接数（根据服务器配置调整）
     queueLimit: 0,
+    enableKeepAlive: true, // 保持连接活跃
+    keepAliveInitialDelay: 30000, // 30秒发送一次心跳包
     // 保留时区和类型转换（解决时间差/TS类型问题）
     timezone: '+08:00',
     typeCast: true,

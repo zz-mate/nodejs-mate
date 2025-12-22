@@ -59,6 +59,7 @@ export const createBillService = async function (req: BillRequest, res: Response
         let result = await billModule.create(req.body)
         // @ts-ignore
         if (result == 1) {
+            await userModule.updateUserExp(user_id,1,"新增账单")
             return res.status(200).json({
                 code: 200,
                 message: "添加成功",

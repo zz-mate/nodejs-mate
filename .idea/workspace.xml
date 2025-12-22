@@ -4,7 +4,40 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="🐛 修复打包" />
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="🐛 修复打包">
+      <change afterPath="$PROJECT_DIR$/src/controllers/miniProgram/bookCategoryController.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookCategoryModule.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/routes/miniProgram/bookCategoryRoutes.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/miniProgram/bookCategoryService.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/types/UserProfile.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/utils/qrcode.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/bookController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/bookController.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/calendarController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/calendarController.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/userController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/userController.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/db/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/db/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/CategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/CategoryModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/DemoModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/DemoModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/miniProgram/bookRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/miniProgram/bookRoutes.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/miniProgram/calendarRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/miniProgram/calendarRoutes.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/miniProgram/userRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/miniProgram/userRoutes.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/bookService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/bookService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/calendarService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/calendarService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/categoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/categoryService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/userService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/userService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/types/user.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/types/user.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -14,6 +47,7 @@
     <option name="RECENT_TEMPLATES">
       <list>
         <option value="JavaScript File" />
+        <option value="TypeScript File" />
       </list>
     </option>
   </component>
@@ -56,26 +90,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "dev",
-    "last_opened_file_path": "/Users/atong/Desktop/nodejs-mate/src",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "pnpm",
-    "settings.editor.selected.configurable": "preferences.lookFeel",
-    "ts.external.directory.path": "/Users/atong/Desktop/nodejs-mate/node_modules/typescript/lib",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;dev&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/atong/Desktop/掌账 Mate/nodejs-mate/src/routes/miniProgram&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;pnpm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/Users/atong/Desktop/掌账 Mate/nodejs-mate/node_modules/typescript/lib&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src/routes/miniProgram" />
       <recent name="$PROJECT_DIR$/src" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
@@ -104,7 +139,22 @@
       <workItem from="1766027759887" duration="1569000" />
       <workItem from="1766030278131" duration="2193000" />
       <workItem from="1766041921830" duration="3149000" />
-      <workItem from="1766045277861" duration="1719000" />
+      <workItem from="1766045277861" duration="3017000" />
+      <workItem from="1766049752120" duration="3017000" />
+      <workItem from="1766056896492" duration="593000" />
+      <workItem from="1766061867645" duration="3083000" />
+      <workItem from="1766073037748" duration="1304000" />
+      <workItem from="1766106378098" duration="6627000" />
+      <workItem from="1766124507744" duration="3182000" />
+      <workItem from="1766157439465" duration="4581000" />
+      <workItem from="1766198151581" duration="8130000" />
+      <workItem from="1766242642657" duration="76000" />
+      <workItem from="1766243750800" duration="2581000" />
+      <workItem from="1766280814639" duration="4248000" />
+      <workItem from="1766315343073" duration="1156000" />
+      <workItem from="1766324008788" duration="7130000" />
+      <workItem from="1766336978276" duration="495000" />
+      <workItem from="1766365915602" duration="23021000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -176,9 +226,20 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts</url>
+          <line>469</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts</url>
-          <line>83</line>
-          <option name="timeStamp" value="1" />
+          <line>177</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts</url>
+          <line>912</line>
+          <properties lambdaOrdinal="-1" />
+          <option name="timeStamp" value="7" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

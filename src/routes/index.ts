@@ -14,6 +14,7 @@ import accountCategoryRoutes from './miniProgram/accountCategoryRoutes'
 import accountRoutes from './miniProgram/accountRoutes'
 import userRoutes from './miniProgram/userRoutes'
 import calendarRoutes from './miniProgram/calendarRoutes'
+import bookCategoryRoutes from './miniProgram/bookCategoryRoutes'
 router.use(demoRoutes);
 router.use(authRoutes);
 router.use(billRoutes);
@@ -25,6 +26,7 @@ router.use(accountCategoryRoutes);
 router.use(accountRoutes);
 router.use(userRoutes);
 router.use(calendarRoutes);
+router.use(bookCategoryRoutes);
 
 
 

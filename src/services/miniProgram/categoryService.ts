@@ -9,9 +9,9 @@ export const categoryCreateService = async (data: any) => {
 }
 export const categoryListService = async (req: Request,res:Response) => {
     try {
-        const {userId, page, pageSize ,type} = req.body
+        const {userId, page, pageSize ,type,bookCategoryId} = req.body
 
-   return  await categoryModule.categoryList(userId,page, pageSize,type);
+   return  await categoryModule.categoryList(userId,page, pageSize,type,bookCategoryId);
 
     }catch (err) {
         // @ts-ignore

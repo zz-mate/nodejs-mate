@@ -7,3 +7,4 @@ export * from './category';
 export * from './budget';
 export * from './budgetCategory';
 export * from './accountCategory';
+export * from './UserProfile';
