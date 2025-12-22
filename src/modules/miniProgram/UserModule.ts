@@ -423,7 +423,7 @@ class UserModule {
     ): Promise<boolean> {
         // 每日经验上限配置
         const limitMap: Record<string, number> = {
-            "新增账单": 50,
+            "新增账单": 20,
             "连续登录": 10,
             "使用自定义分类": 30,
             "导出账单数据": 20,

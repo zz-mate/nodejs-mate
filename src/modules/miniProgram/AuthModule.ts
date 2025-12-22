@@ -4,7 +4,7 @@ import {v4 as uuidv4} from "uuid"; // 核心导入语句
 import type {UserDbSchema} from "../../types";
 import {generateToken} from '../../utils/tokenUtils';
 import HttpError from "../../utils/HttpError";
-
+import UsernameGenerator from '../../tools/usernameGenerator';
 class AuthModule {
     userTableName = 'mate_user';
     bookTableName = 'mate_book';
@@ -39,7 +39,7 @@ class AuthModule {
             phone: phone,
             email: null,
             password: hashedPassword,
-            nickname: "掌账Mate",
+            nickname: UsernameGenerator.finance(),
             avatar: "",
             is_active: 1,
             role: "user",

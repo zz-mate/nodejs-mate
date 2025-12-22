@@ -549,7 +549,6 @@ class CalendarModule {
                 ORDER BY latest_bill_time DESC
             `;
             const [lineRows] = await pool.execute(lineSql, queryParams);
-            console.log('lineRows:', lineRows);
 
             // 构建日期映射（含bill_time，确保为字符串）
             const dayMap = new Map<number, {
