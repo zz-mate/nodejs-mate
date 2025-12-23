@@ -2,8 +2,10 @@ import pool from '../../db';
 import type {UserDbSchema, BillDbSchema, ApiResponse, PaginationData} from "../../types";
 import {v4 as uuidv4} from "uuid";
 import dayjs from 'dayjs';
-import {formatAmount,parseJsonToArray} from "../../utils/tools"
+import {formatAmount, parseJsonToArray} from "../../utils/tools"
 import HttpError from '../../utils/HttpError';
+import userModule from "./UserModule";
+import pointModule from "./PointModule";
 
 class BillModule {
     billTableName = 'mate_bill';
@@ -36,9 +38,9 @@ class BillModule {
             // 2. 执行插入账单SQL
             [result] = await pool.execute(
                 `INSERT INTO ${this.billTableName}
-                 (uuid, user_id, book_id, category_id, consume_user_id, amount, type, currency, bill_time, tags,remark,
+                 (uuid, user_id, book_id, category_id, consume_user_id, amount, type, currency, bill_time, tags, remark,
                   created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     defaultData.uuid,
                     defaultData.user_id,
@@ -60,7 +62,16 @@ class BillModule {
             if ((result as any).affectedRows === 1 && defaultData.type === 2) {
                 await this.updateBudgetActualAmountAfterBillCreate(defaultData);
             }
-
+            /***新增经验 & 积分**START*/
+            await userModule.updateUserExp(defaultData.user_id, 1, "新增账单", (result as any).insertId)
+            await pointModule.addPoints(
+                defaultData.user_id,
+                1, // 奖励1积分
+                'bill_add', // 业务类型：添加账单
+                '新增账单奖励积分', // 备注
+                (result as any).insertId // 业务ID：账单ID（防重复发放）
+            );
+            /***新增经验 & 积分**END*/
             return (result as any).affectedRows.toString();
         } catch (error) {
             const err = error as Error & { code: string };
@@ -112,15 +123,15 @@ class BillModule {
                 // [totalActualAmount, budget.id]
 
                 `UPDATE ${this.budgetTableName}
-                     SET actual_amount = ?,
-                         -- 同步计算主预算的剩余百分比（保留负数，仅防护除以0）
-                         remaining_percent = IF(
-                                 amount = 0,  -- 主预算金额为0时，百分比设为0
-                                 0,
-                                 ROUND(((amount - ?) / amount) * 100, 2)  -- 保留负数，无范围限制
-                                             ),
-                         updated_at = NOW()  -- 补充更新时间（可选，建议加）
-                     WHERE id = ?`,
+                 SET actual_amount     = ?,
+                     -- 同步计算主预算的剩余百分比（保留负数，仅防护除以0）
+                     remaining_percent = IF(
+                             amount = 0, -- 主预算金额为0时，百分比设为0
+                             0,
+                             ROUND(((amount - ?) / amount) * 100, 2) -- 保留负数，无范围限制
+                                         ),
+                     updated_at        = NOW() -- 补充更新时间（可选，建议加）
+                 WHERE id = ?`,
                 // 参数顺序：actualAmount → 用于计算百分比的实际支出 → budgetId
                 [totalActualAmount, totalActualAmount, budget.id]
             );
@@ -137,13 +148,14 @@ class BillModule {
             // 5. 更新分类预算表的实际支出
             const [rows] = await pool.execute(
                 `SELECT *
-             FROM ${this.budgetCategoryTableName}
-             WHERE budget_id = ? AND category_id=?  LIMIT 1`,
-                [budget.id,billData.category_id]
+                 FROM ${this.budgetCategoryTableName}
+                 WHERE budget_id = ?
+                   AND category_id = ? LIMIT 1`,
+                [budget.id, billData.category_id]
             );
 
             // @ts-ignore
-            console.log(rows[0].category_amount);
+            // console.log(rows[0].category_amount);
             //--------
             // const newCategoryActual = Math.max(0, Number(category_current_actual) - Number(deleted_amount));
             // const categoryTotalBudget = Number(bill.category_total_budget) || 0;
@@ -161,12 +173,13 @@ class BillModule {
             await pool.execute(
                 `UPDATE ${this.budgetCategoryTableName}
                  SET category_actual_amount = ?,
-                     remaining_percent = ?,
+                     remaining_percent      = ?,
                      updated_at             = NOW()
                  WHERE budget_id = ?
                    AND category_id = ?`,
-                [categoryActualAmount,categoryRemainingPercent, budget.id, billData.category_id]
+                [categoryActualAmount, categoryRemainingPercent, budget.id, billData.category_id]
             );
+
             console.log(`✅ 预算ID ${budget.id} 分类ID ${billData.category_id} 实际支出更新为：${categoryActualAmount}元`);
         } catch (error: any) {
             console.error(`⚠️ 更新预算实际支出失败：${error.message}`, error);
@@ -175,7 +188,12 @@ class BillModule {
     }
 
     // ========== 辅助方法：根据账单时间匹配所属预算 ==========
-    private async getBudgetByBillTime(user_id: number, book_id: number, billTime: dayjs.Dayjs): Promise<{id: number;cycle_start: string;cycle_end: string;cycle_type: string} | null> {
+    private async getBudgetByBillTime(user_id: number, book_id: number, billTime: dayjs.Dayjs): Promise<{
+        id: number;
+        cycle_start: string;
+        cycle_end: string;
+        cycle_type: string
+    } | null> {
         // 构造不同周期的查询条件
         const billDate = billTime.format('YYYY-MM-DD');
         let querySql = '';
@@ -234,8 +252,7 @@ class BillModule {
     }
 
 
-
-    async billList(userId: number,page?: number,pageSize?: number,start_time?: string,end_time?: string,bookId?: number,type?: number | null | undefined): Promise<any> {
+    async billList(userId: number, page?: number, pageSize?: number, start_time?: string, end_time?: string, bookId?: number, type?: number | null | undefined): Promise<any> {
         // 金额格式化工具函数
         const formatAmount = (amount: number): string => {
             return amount.toFixed(2);
@@ -266,9 +283,8 @@ class BillModule {
                 }
 
                 const [boundaryRows] = await pool.execute(
-                    `SELECT
-                         IFNULL(MIN(b.bill_time), '1970-01-01 00:00:00') AS min_time,
-                         IFNULL(MAX(b.bill_time), NOW()) AS max_time
+                    `SELECT IFNULL(MIN(b.bill_time), '1970-01-01 00:00:00') AS min_time,
+                            IFNULL(MAX(b.bill_time), NOW())                 AS max_time
                      FROM ${this.billTableName} b
                      WHERE ${boundaryConditions.join(' AND ')}`,
                     boundaryParams
@@ -284,7 +300,7 @@ class BillModule {
             };
 
             if (!start_time && !end_time) {
-                const { minTime, maxTime } = await getBillTimeBoundary(userId, bookId);
+                const {minTime, maxTime} = await getBillTimeBoundary(userId, bookId);
                 defaultStart = minTime;
                 defaultEnd = maxTime;
             }
@@ -310,7 +326,15 @@ class BillModule {
                 return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
             };
 
-            const getPeriodTime = (timeStr: string): { start: Date; end: Date; dimension: 'year' | 'month' | 'custom'; year: number; month?: number; isDateLevel: boolean; originalStr: string } => {
+            const getPeriodTime = (timeStr: string): {
+                start: Date;
+                end: Date;
+                dimension: 'year' | 'month' | 'custom';
+                year: number;
+                month?: number;
+                isDateLevel: boolean;
+                originalStr: string
+            } => {
                 if (!timeStr) {
                     throw new Error('时间字符串不能为空');
                 }
@@ -409,9 +433,8 @@ class BillModule {
             }
 
             const [fullSummaryRows] = await pool.execute(
-                `SELECT
-                     IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0.00) AS fullIncomeTotal,
-                     IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0.00) AS fullExpendTotal
+                `SELECT IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0.00) AS fullIncomeTotal,
+                        IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0.00) AS fullExpendTotal
                  FROM ${this.billTableName} b
                  WHERE ${fullWhereConditions.join(' AND ')}`,
                 fullQueryParams
@@ -439,19 +462,26 @@ class BillModule {
 
             const listQueryParams = [...queryParams, offsetStr, pageSizeStr];
             const [listRows] = await pool.execute(
-                `SELECT
-                     b.id, b.user_id, b.amount, b.type, b.currency,
-                     DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s') AS full_bill_time,
-                     DATE_FORMAT(b.bill_time, '%H:%i') AS bill_time,
-                     DATE_FORMAT(b.bill_time, '%Y')  AS bill_year,
-                     DATE_FORMAT(b.bill_time, '%m')  AS bill_month,
-                     DATE_FORMAT(b.bill_time, '%d')  AS bill_day,
-                     b.tags,
-                     b.remark,
-                     DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
-                     DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-                     c.name AS category_name, c.icon AS category_icon, c.type AS category_type,
-                     bo.id AS book_id, bo.name AS book_name, bo.is_default AS book_is_default
+                `SELECT b.id,
+                        b.user_id,
+                        b.amount,
+                        b.type,
+                        b.currency,
+                        DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s')                                  AS full_bill_time,
+                        DATE_FORMAT(b.bill_time, '%H:%i')                                              AS bill_time,
+                        DATE_FORMAT(b.bill_time, '%Y')                                                 AS bill_year,
+                        DATE_FORMAT(b.bill_time, '%m')                                                 AS bill_month,
+                        DATE_FORMAT(b.bill_time, '%d')                                                 AS bill_day,
+                        b.tags,
+                        b.remark,
+                        DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
+                        DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                        c.name                                                                         AS category_name,
+                        c.icon                                                                         AS category_icon,
+                        c.type                                                                         AS category_type,
+                        bo.id                                                                          AS book_id,
+                        bo.name                                                                        AS book_name,
+                        bo.is_default                                                                  AS book_is_default
                  FROM ${this.billTableName} b
                           LEFT JOIN mate_category c ON b.category_id = c.id
                           LEFT JOIN mate_book bo ON b.book_id = bo.id
@@ -548,7 +578,7 @@ class BillModule {
                 }
 
                 // 暂存账单（后续更新进度）
-                const { _year, _month, _day, ...pureBill } = bill;
+                const {_year, _month, _day, ...pureBill} = bill;
                 dayGroup.list.push({
                     ...pureBill,
                     amount: pureBill.amount.toFixed(2),
@@ -695,7 +725,7 @@ class BillModule {
                     }
                 } : {
                     year: targetYear,
-                    ...(queryDimension === 'month' ? { month: targetMonth } : {})
+                    ...(queryDimension === 'month' ? {month: targetMonth} : {})
                 }),
                 listType: 'month',
                 dataList: monthList
@@ -704,7 +734,9 @@ class BillModule {
             // ---------------------- 总条数查询 ----------------------
             let total = 0;
             const [countRows] = await pool.execute(
-                `SELECT COUNT(*) AS total FROM ${this.billTableName} b WHERE ${whereConditions.join(' AND ')}`,
+                `SELECT COUNT(*) AS total
+                 FROM ${this.billTableName} b
+                 WHERE ${whereConditions.join(' AND ')}`,
                 queryParams
             );
             total = Number((countRows as any[])[0]?.total || 0);
@@ -814,12 +846,17 @@ class BillModule {
             };
         }
     }
+
     /**
      * 删除支出账单（type=2），并重新计算分类预算/主预算金额
      * @param userId 用户ID
      * @param billId 账单ID
      */
-    async removeBill(userId: number, billId: number): Promise<{code: number;message: string;data?: Record<string, any>;}> {
+    async removeBill(userId: number, billId: number): Promise<{
+        code: number;
+        message: string;
+        data?: Record<string, any>;
+    }> {
         const realUserId = Number(userId);
         const realBillId = Number(billId);
         let totalBookExpense = 0;
@@ -923,7 +960,7 @@ class BillModule {
                 return {code: 500, message: "支出账单删除失败（数据未变更）"};
             }
             console.log("账单删除成功，金额：", bill.bill_amount);
-
+            // await userModule.rollbackUserExp(userId, billId, "删除账单");
             // 步骤3：统一处理预算更新（覆盖有/无分类预算场景）
             let budgetUpdateResult = {categoryUpdated: false, mainUpdated: false};
             const {
@@ -953,7 +990,7 @@ class BillModule {
                 await connection.execute(
                     `UPDATE mate_budget_category mbc
                      SET mbc.category_actual_amount = ?,
-                         mbc.remaining_percent = ?,  -- 新增：更新剩余百分比（支持负数）
+                         mbc.remaining_percent      = ?, -- 新增：更新剩余百分比（支持负数）
                          mbc.updated_at             = NOW()
                      WHERE mbc.id = ?`,
                     [newCategoryActual, remainingPercent, category_budget_id]
@@ -999,8 +1036,7 @@ class BillModule {
             }
 
             // 步骤4：提交事务
-            await connection.commit();
-
+            await connection.commit()
             // 步骤5：返回精准提示
             return {
                 code: 200,

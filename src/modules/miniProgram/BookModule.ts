@@ -5,7 +5,7 @@ import HttpError from "../../utils/HttpError";
 
 class UserModule {
     bookTableName = 'mate_book';
-
+    userTableName = 'mate_user';
     /**
      * 创建书籍
      * @param userId 创建人ID
@@ -111,14 +111,6 @@ class UserModule {
         }
     }
 
-
-    /**
-     * 更新书籍信息（支持部分字段更新，新增is_default处理）
-     * @param userId 操作人ID（用于权限校验）
-     * @param bookId 书籍ID
-     * @param updateData 要更新的字段（可选）
-     * @returns 包含状态码和书籍数据的对象
-     */
     /**
      * 更新书籍信息（修复is_default不更新问题）
      * @param userId 操作人ID（用于权限校验）
@@ -248,7 +240,10 @@ class UserModule {
              WHERE id = ? AND user_id = ?`,
                 updateParams
             );
-
+            await connection.execute(
+                `UPDATE ${this.userTableName} SET default_book_id = ? WHERE id = ?`,
+                [bookId, userId]
+            );
             if ((updateResult as any).affectedRows === 0) {
                 await connection.rollback();
                 return { code: 500, data: null, message: '书籍更新失败，未修改任何数据' };

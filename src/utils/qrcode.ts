@@ -5,13 +5,15 @@ import type {QRCodeConfig, UserDbSchema} from '../types';
 /**
  * 扩展：支持字符串/对象两种传参形式
  * @param userId 用户ID
+ * @param bookId
  * @param userInfo 可以是字符串（昵称）| 用户对象（含nickname/avatar等）
  * @param profile 等级信息（可选）
  * @param config 二维码配置
  */
 export const generateUserQRCode = async (
     userId: number,
-    userInfo: string | Pick<UserDbSchema, 'id' | 'nickname' | 'avatar'>,
+    bookId: number | null | undefined,
+    userInfo: string | Pick<UserDbSchema, "id" | "nickname" | "avatar">,
     profile: Record<string, any> = {}, // 等级信息（可选）
     config: QRCodeConfig = {}
 ): Promise<string> => {
@@ -25,6 +27,7 @@ export const generateUserQRCode = async (
         const qrContent = JSON.stringify({
             type: 'user_profile',
             userId,
+            bookId,
             nickname: userData.nickname || '',
             avatar: userData.avatar || '',
             level: profile.level || 1,

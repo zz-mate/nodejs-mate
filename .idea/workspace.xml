@@ -4,12 +4,22 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="修改sql配置">
-      <change afterPath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" afterDir="false" />
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="生成随机昵称">
+      <change afterPath="$PROJECT_DIR$/.npmrc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/controllers/miniProgram/pointController.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/routes/miniProgram/pointRoutes.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/qrcode.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/qrcode.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -128,6 +138,8 @@
       <workItem from="1766324008788" duration="7130000" />
       <workItem from="1766336978276" duration="495000" />
       <workItem from="1766365915602" duration="31673000" />
+      <workItem from="1766421485221" duration="8000" />
+      <workItem from="1766450506044" duration="12536000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -223,13 +235,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts</url>
-          <line>177</line>
+          <line>190</line>
           <option name="timeStamp" value="5" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts</url>
           <line>911</line>
-          <properties lambdaOrdinal="-1" />
           <option name="timeStamp" value="7" />
         </line-breakpoint>
       </breakpoints>

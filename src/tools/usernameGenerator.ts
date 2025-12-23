@@ -26,10 +26,26 @@ class UsernameGenerator {
      * @returns 贴合理财场景的趣味用户名
      */
     static finance(): string {
-        // 理财相关前缀（匹配之前的等级体系）
-        const prefixList = ['招财', '攒钱', '理财', '小金库', '财务', '富盈', '金旺'];
-        // 吉利数字后缀
-        const suffixList = ['88', '66', '99', '888', '666', '999'];
+        // 拓展：新增更多理财相关前缀（覆盖不同理财场景）
+        const prefixList = [
+            // 核心理财
+            '招财', '攒钱', '理财', '小金库', '财务', '富盈', '金旺',
+            // 收支管理
+            '收支稳', '记账通', '算得清', '账无忧', '收支平', '零钱罐',
+            // 目标导向
+            '攒首付', '还房贷', '养钱包', '存嫁妆', '备学费', '养老钱',
+            // 风格化前缀
+            '轻理财', '简记账', '慢攒钱', '巧省钱', '智理财', '稳赚钱',
+            // 吉利寓意
+            '日进金', '月有余', '年有余', '节节高', '步步高', '万事盈'
+        ];
+        // 拓展：新增更多吉利数字/组合后缀
+        const suffixList = [
+            '88', '66', '99', '888', '666', '999',
+            '088', '066', '099', '168', '188', '199',
+            '520', '818', '919', '618', '816', '918',
+            '777', '555', '333', '2025', '2026', '2027' // 年份/幸运数字
+        ];
         // 随机选取前缀和后缀
         const randomPrefix = prefixList[Math.floor(Math.random() * prefixList.length)];
         const randomSuffix = suffixList[Math.floor(Math.random() * suffixList.length)];
@@ -48,10 +64,22 @@ class UsernameGenerator {
         length?: number;
     } = {}): string {
         const { type = 'mix', length = 6 } = options;
-        // 字符池定义
+        // 字符池定义（大幅拓展）
         const letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const numbers = '0123456789';
-        const cnWords = ['财', '富', '攒', '省', '钱', '利', '盈', '旺']; // 记账相关中文
+        // 拓展：新增更多记账/理财相关中文，分场景分类
+        const cnWords = [
+            // 核心词汇
+            '财', '富', '攒', '省', '钱', '利', '盈', '旺',
+            // 收支相关
+            '收', '支', '余', '存', '贷', '还', '付', '结',
+            // 工具相关
+            '账', '单', '册', '记', '算', '核', '清', '查',
+            // 吉利寓意
+            '吉', '祥', '顺', '兴', '隆', '盛', '丰', '足',
+            // 年轻化词汇
+            '冲', '氪', '囤', '薅', '赚', '爆', '香', '爽'
+        ];
 
         let charPool = '';
         let finalLength = length;

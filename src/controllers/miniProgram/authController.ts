@@ -25,7 +25,8 @@ export const loginByPhone = async (req: Request, res: Response) => {
             data: result
         })
     } catch (error) {
-
+        // @ts-ignore
+        res.status(error.status).json({code: error.status, message: (error as Error).message});
     }
 }
 /**

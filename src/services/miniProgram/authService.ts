@@ -2,13 +2,14 @@
 import authModel from "../../modules/miniProgram/AuthModule"
 import {formatDate} from "../../utils/date";
 import jwt from 'jsonwebtoken';
-
+import HttpError from '../../utils/HttpError';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'; // 生产环境需更换为强密钥
 
 
 /**
  * 手机号注册登陆
- * @param phone
+ * @param req
+ * @param res
  */
 export const loginByPhoneService = async (req: Request, res: Response) => {
 
@@ -22,9 +23,9 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
     // 1. 手机号格式化（防呆：即使入参是字符串，也做trim和格式校验）
     const phoneStr = phone.trim();
     if (!/^1[3-9]\d{9}$/.test(phoneStr)) {
-        throw new Error("手机号格式不正确，请输入11位有效手机号");
+        // throw new Error("手机号格式不正确，请输入11位有效手机号");
+        throw new HttpError(`手机号格式不正确，请输入11位有效手机号`, 403);
     }
-
     // 2. 查询用户是否存在
     const existingUser = await authModel.findByPhone(phoneStr);
 
@@ -33,9 +34,9 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
         // 用枚举替代数字，简化条件判断（核心优化点）
         switch (existingUser.is_active) {
             case 0: // 0-禁用
-                throw new Error("账户未激活，无法登录");
+                throw new HttpError(`账户未激活，无法登录`, 403);
             case 2: // 2-注销
-                throw new Error("账户已注销，无法登录");
+                throw new HttpError(`账户已注销，无法登录`, 403);
             case 1: // 1-正常（核心分支）
                 // 3-1.更新最后登录时间
                 await authModel.updateLastLogin(existingUser.id!);
@@ -45,7 +46,7 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
                 const token = authModel.generateToken(safeUser);
                 return {token};
             default:
-                throw new Error("账户状态异常，请联系管理员");
+                throw new HttpError(`账户状态异常，请联系管理员`, 500);
         }
     }
     // 4. 用户不存在： 创建新用户
