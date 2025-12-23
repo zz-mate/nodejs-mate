@@ -228,8 +228,6 @@ class UserModule {
                 userLevelExp:0,
                 userLevel:0
             };
-        console.log(levelInfo.min_exp,100);
-        console.log(userLevelExp,5)
             const [pointRows] = await pool.execute(
                 `SELECT *
                  FROM ${this.userPointsTableName}

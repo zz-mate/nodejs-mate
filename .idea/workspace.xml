@@ -4,22 +4,15 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="生成随机昵称">
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="优化用户积分&amp;经验">
       <change afterPath="$PROJECT_DIR$/.npmrc" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/controllers/miniProgram/pointController.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/routes/miniProgram/pointRoutes.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/middlewares/logger.middleware.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/routes/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/qrcode.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/qrcode.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -139,7 +132,8 @@
       <workItem from="1766336978276" duration="495000" />
       <workItem from="1766365915602" duration="31673000" />
       <workItem from="1766421485221" duration="8000" />
-      <workItem from="1766450506044" duration="12536000" />
+      <workItem from="1766450506044" duration="12597000" />
+      <workItem from="1766483421136" duration="3264000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -197,7 +191,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766410376065</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="优化用户积分&amp;经验">
+      <option name="closed" value="true" />
+      <created>1766467828822</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1766467828822</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -223,7 +225,8 @@
     <MESSAGE value=" 修复打包" />
     <MESSAGE value="优化个人信息" />
     <MESSAGE value="修改sql配置" />
-    <option name="LAST_COMMIT_MESSAGE" value="修改sql配置" />
+    <MESSAGE value="优化用户积分&amp;经验" />
+    <option name="LAST_COMMIT_MESSAGE" value="优化用户积分&amp;经验" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
