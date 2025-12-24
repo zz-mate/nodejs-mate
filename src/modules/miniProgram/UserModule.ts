@@ -1,7 +1,22 @@
 import pool from '../../db';
-import type {UserDbSchema,UserQRContent, QRCodeConfig, UserProfile} from "../../types";
+import type {UserDbSchema, UserQRContent, QRCodeConfig, UserProfile} from "../../types";
 import {maskPhoneNumber} from "../../utils/tools";
 import { generateUserQRCode } from '../../utils/qrcode';
+import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+
+/**
+ * 经验限制配置项类型
+ * - limitType: 限制类型（lifetime-终身仅N次 / daily-每日N次）
+ * - limitCount: 限制次数
+ * - expValue: 该行为对应的经验值
+ * - remark: 行为备注（日志/前端展示用）
+ */
+interface ExpLimitConfigItem {
+    limitType: 'lifetime' | 'daily';
+    limitCount: number;
+    expValue: number;
+    remark: string;
+}
 
 class UserModule {
     // 表名定义
@@ -10,7 +25,31 @@ class UserModule {
     billTableName = 'mate_bill';
     userLevelRuleTableName = 'mate_user_level_rule';
     userExpLogTableName = 'mate_user_exp_log'; // 经验日志表（新增source_id字段）
-     userPointsTableName = 'mate_user_points'; // 用户总积分/可用积分表
+    userPointsTableName = 'mate_user_points'; // 用户总积分/可用积分表
+
+    /**
+     * 经验奖励规则配置（和积分模块对齐）
+     * 核心规则：
+     * - 高频行为（记账、登录）：每日限制
+     * - 低频行为（完善资料、新用户）：终身仅1次
+     */
+    private expLimitConfig: Record<string, ExpLimitConfigItem> = {
+        // 高频行为 - 每日限制
+        bill_add: { limitType: 'daily', limitCount: 1, expValue: 1, remark: '新增账单' },
+        login_continuous: { limitType: 'daily', limitCount: 1, expValue: 10, remark: '连续登录' },
+        category_custom_use: { limitType: 'daily', limitCount: 1, expValue: 1, remark: '使用自定义分类' },
+        bill_export: { limitType: 'daily', limitCount: 1, expValue: 20, remark: '导出账单数据' },
+        login_7_days: { limitType: 'daily', limitCount: 1, expValue: 50, remark: '连续登录7天奖励' },
+        login_30_days: { limitType: 'daily', limitCount: 1, expValue: 200, remark: '连续登录30天奖励' },
+        book_create: { limitType: 'daily', limitCount: 1, expValue: 1, remark: '创建多账本' },
+
+        // 低频行为 - 终身仅1次
+        profile_email_complete: { limitType: 'lifetime', limitCount: 1, expValue: 20, remark: '完善邮箱信息' },
+        profile_avatar_complete: { limitType: 'lifetime', limitCount: 1, expValue: 15, remark: '完善头像信息' },
+        profile_info_complete: { limitType: 'lifetime', limitCount: 1, expValue: 10, remark: '完善生日/性别信息' },
+        user_newbie: { limitType: 'lifetime', limitCount: 1, expValue: 100, remark: '新用户注册奖励' },
+    };
+
     /**
      * 基础查询：通过ID查找用户（非事务 → pool.execute）
      * @param user_id 用户ID
@@ -18,9 +57,7 @@ class UserModule {
      */
     async findById(user_id: number): Promise<UserDbSchema | null> {
         const [rows] = await pool.execute(
-            `SELECT id
-             FROM ${this.userTableName}
-             WHERE id = ? LIMIT 1`,
+            `SELECT id FROM ${this.userTableName} WHERE id = ? LIMIT 1`,
             [user_id]
         );
         const user = (rows as UserDbSchema[])[0];
@@ -36,105 +73,69 @@ class UserModule {
         userId: number,
         config: QRCodeConfig = {}
     ): Promise<string> {
-        // 1. 获取用户信息（非事务 → pool.execute）
         const [rows] = await pool.execute(
-            `SELECT id,avatar,nickname,default_book_id
-             FROM ${this.userTableName}
-             WHERE id = ? LIMIT 1`,
+            `SELECT id,avatar,nickname,default_book_id FROM ${this.userTableName} WHERE id = ? LIMIT 1`,
             [userId]
         );
         const user = (rows as UserDbSchema[])[0];
         const bookId = user?.default_book_id || 0;
-        // 2. 生成二维码
         return generateUserQRCode(userId, bookId, {}, config);
     };
+
+    /**
+     * 计算等级进度百分比
+     */
     calculateLevelProgressPercent(userExp: number, currentLevelMinExp: number) {
-        // 处理当前等级最低经验为0的特殊情况（避免除以0）
         if (currentLevelMinExp <= 0) {
             return userExp > 0 ? 100.0 : 0.0;
         }
-
-        // 核心计算：用户经验 / 当前等级最低经验 * 100%
         let percent = (userExp / currentLevelMinExp) * 100;
-
-        // 边界限制：百分比最多100%，最少0%
         percent = Math.max(0, Math.min(100, percent));
-
-        // 保留1位小数并转为数字
         return Number(percent.toFixed(1));
     }
 
     /**
      * 核心方法：获取用户完整信息（含等级、统计、自动更新）
-     * 事务内用connection.execute，非事务前置/后置查询用pool.execute
-     * @returns 包含扩展信息的用户数据
-     * @param userId
      */
     async info(userId: number): Promise<(UserDbSchema & {
         gender_text: string;
-        pointsInfo:any,
-        levelInfo:any,
-        // level?: number;
-        // level_exp?: number;
-        // level_name?: string;
-        // min_exp?: number;
-        // privileges?: string;
-        // icon: string;
+        pointsInfo: any;
+        levelInfo: any;
         total_used_days: number;
         continuous_used_days: number;
         total_bill_count: number;
     }) | null> {
         let connection: any = null;
         try {
-            // ===== 非事务前置查询：用户基础信息（pool.execute）=====
+            // 非事务前置查询：用户基础信息
             const [userRows] = await pool.execute(
-                `SELECT id,
-                        uuid,
-                        username,
-                        email,
-                        phone,
-                        nickname,
-                        avatar,
-                        gender,
-                        birthday,
-                        default_book_id,
-                        is_active,
-                        created_at,
-                        updated_at
-                 FROM ${this.userTableName}
-                 WHERE id = ?
-                   AND is_active = 1
-                   AND deleted_at IS NULL LIMIT 1`,
+                `SELECT id,uuid,username,email,phone,nickname,avatar,gender,birthday,default_book_id,is_active,created_at,updated_at
+                 FROM ${this.userTableName} WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1`,
                 [userId]
             );
             const user = (userRows as UserDbSchema[])[0];
-            if (!user) return null; // 无用户直接返回，无需开启事务
+            if (!user) return null;
 
-            // ===== 非事务查询：记账笔数（pool.execute）=====
+            // 非事务查询：记账笔数
             const [billCountRows] = await pool.execute(
-                `SELECT COUNT(*) as total_count
-                 FROM ${this.billTableName}
-                 WHERE user_id = ?
-                   AND is_deleted = 0`,
+                `SELECT COUNT(*) as total_count FROM ${this.billTableName} WHERE user_id = ? AND is_deleted = 0`,
                 [userId]
             );
             const totalBillCount = (billCountRows as any[])[0].total_count || 0;
 
-            // ===== 计算核心统计值（非数据库操作）=====
+            // 计算注册天数
             const registerTime = user.created_at;
             const currentTime = new Date();
             // @ts-ignore
             const totalUsedDays = Math.floor((currentTime.getTime() - new Date(registerTime).getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-            // ===== 开启事务：所有更新操作绑定单个连接 =====
+            // 开启事务
             connection = await pool.getConnection();
             await connection.beginTransaction();
 
-            // ===== 事务内：查询用户信息表 =====
+            // 查询/更新用户档案
             const [profileRows] = await connection.execute(
-                `SELECT id, level, level_exp, last_login_time, continuous_used_days
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
+                `SELECT id, level, level_exp, last_login_time, continuous_used_days FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
             const profileExist = (profileRows as any[]).length > 0;
@@ -143,7 +144,6 @@ class UserModule {
             let continuousUsedDays = 1;
 
             if (profileExist) {
-                // 有数据：更新统计信息
                 const profile = (profileRows as any[])[0];
                 userLevel = profile.level;
                 userLevelExp = profile.level_exp;
@@ -156,55 +156,50 @@ class UserModule {
                     continuousUsedDays = diffDays === 1 ? oldContinuousDays + 1 : 1;
                 }
 
-                // 执行更新（事务内 → connection.execute）
+                // 更新统计信息
                 await connection.execute(
                     `UPDATE ${this.userProfileTableName}
-           SET last_login_time      = NOW(),
-               total_used_days      = ?,
-               continuous_used_days = ?,
-               total_bill_count     = ?,
-               updated_at           = NOW()
-           WHERE user_id = ?`,
+                     SET last_login_time = NOW(), total_used_days = ?, continuous_used_days = ?, total_bill_count = ?, updated_at = NOW()
+                     WHERE user_id = ?`,
                     [totalUsedDays, continuousUsedDays, totalBillCount, userId]
                 );
             } else {
-                // 无数据：插入初始统计数据
+                // 插入初始数据
                 await connection.execute(
                     `INSERT INTO ${this.userProfileTableName}
-           (user_id, level, level_exp, register_time, last_login_time, total_used_days, continuous_used_days,
-            total_bill_count, month_bill_count, total_income, total_expense, total_book_count,
-            favorite_category_ids, is_vip, vip_expire_time, remark, created_at, updated_at, is_deleted)
-           VALUES (?, 1, 0, ?, NOW(), ?, 1, ?, 0, 0.00, 0.00, 1, '', 0, null, '', NOW(), NOW(), 0)`,
+                     (user_id, level, level_exp, register_time, last_login_time, total_used_days, continuous_used_days, total_bill_count,
+                      month_bill_count, total_income, total_expense, total_book_count, favorite_category_ids, is_vip, vip_expire_time,
+                      remark, created_at, updated_at, is_deleted)
+                     VALUES (?, 1, 0, ?, NOW(), ?, 1, ?, 0, 0.00, 0.00, 1, '', 0, null, '', NOW(), NOW(), 0)`,
                     [userId, registerTime, totalUsedDays, totalBillCount]
                 );
+
+                // 新用户奖励（终身仅1次）
+                await this.addExpByBizType(userId, 'user_newbie', null);
             }
 
-            // 连续登录奖励（事务内 → 复用connection）
+            // 连续登录奖励（按规则校验）
             if (continuousUsedDays === 7) {
-                await this.updateUserExpWithConn(userId, 50, "连续登录7天奖励", connection, null);
+                await this.addExpByBizType(userId, 'login_7_days', null);
             }
             if (continuousUsedDays === 30) {
-                await this.updateUserExpWithConn(userId, 200, "连续登录30天奖励", connection, null);
+                await this.addExpByBizType(userId, 'login_30_days', null);
             }
 
-            // 查询奖励后经验（事务内）
+            // 查询更新后经验
             const [updatedProfile] = await connection.execute(
-                `SELECT level, level_exp
-         FROM ${this.userProfileTableName}
-         WHERE user_id = ? LIMIT 1`,
+                `SELECT level, level_exp FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
             userLevel = (updatedProfile as any[])[0]?.level || 1;
             userLevelExp = (updatedProfile as any[])[0]?.level_exp || 0;
 
-            // 检查等级升级（事务内）
+            // 检查等级升级
             await this.checkUserLevelUp(userId, userLevelExp, connection);
 
-            // 查询升级后等级（事务内）
+            // 最终等级查询
             const [finalProfile] = await connection.execute(
-                `SELECT level, level_exp
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
+                `SELECT level, level_exp FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
             userLevel = (finalProfile as any[])[0]?.level || 1;
@@ -213,76 +208,208 @@ class UserModule {
             // 提交事务
             await connection.commit();
 
-            // ===== 非事务后置查询：等级规则（pool.execute）=====
+            // 查询等级规则和积分信息
             const [levelRuleRows] = await pool.execute(
-                `SELECT level_name, min_exp, privileges, icon
-                 FROM ${this.userLevelRuleTableName}
-                 WHERE id = ? LIMIT 1`,
+                `SELECT level_name, min_exp, privileges, icon FROM ${this.userLevelRuleTableName} WHERE id = ? LIMIT 1`,
                 [userLevel]
             );
             const levelInfo = (levelRuleRows as any[])[0] || {
-                level_name: '新手',
-                min_exp: 100,
-                privileges: '基础记账、1个账本',
-                icon: '',
-                userLevelExp:0,
-                userLevel:0
+                level_name: '新手', min_exp: 100, privileges: '基础记账、1个账本', icon: '', userLevelExp: 0, userLevel: 0
             };
             const [pointRows] = await pool.execute(
-                `SELECT *
-                 FROM ${this.userPointsTableName}
-                 WHERE user_id = ? LIMIT 1`,
+                `SELECT * FROM ${this.userPointsTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
-            const pointsInfo = (pointRows as any[])[0]
+            const pointsInfo = (pointRows as any[])[0];
+
             // 性别映射
+            // @ts-ignore
+            const genderText = { 1: '男', 2: '女' }[user.gender] || '未知';
 
-            const genderText = {
-                1: '男',
-                2: '女'
-                // @ts-ignore
-            }[user.gender] || '未知';
-
-            // 组装返回数据
             return {
                 ...user,
                 phone: maskPhoneNumber(typeof user.phone === "string" ? user.phone : ''),
                 gender_text: genderText,
                 pointsInfo,
-                levelInfo:{...levelInfo,user_level_exp:userLevelExp,user_level:userLevel,LevelProgress:this.calculateLevelProgressPercent(userLevelExp,levelInfo.min_exp)},
-                // level: userLevel,
-                // level_exp: userLevelExp,
-                // level_name: levelRule.level_name,
-                // min_exp: levelRule.min_exp,
-                // privileges: levelRule.privileges,
-                // icon: levelRule.icon,
+                levelInfo: {
+                    ...levelInfo,
+                    user_level_exp: userLevelExp,
+                    user_level: userLevel,
+                    LevelProgress: this.calculateLevelProgressPercent(userLevelExp, levelInfo.min_exp)
+                },
                 total_used_days: totalUsedDays,
                 continuous_used_days: continuousUsedDays,
                 total_bill_count: totalBillCount
             };
 
         } catch (error) {
-            // 异常回滚
-            if (connection) {
-                await connection.rollback().catch((err: any) => console.error("事务回滚失败：", err));
-            }
+            if (connection) await connection.rollback().catch((err: any) => console.error("事务回滚失败：", err));
             console.error("获取/更新用户信息失败：", { userId, error: (error as Error).message });
             throw new Error(`获取用户信息失败：${(error as Error).message}`);
         } finally {
-            // 释放连接
-            if (connection) {
-                connection.release();
-            }
+            if (connection) connection.release();
         }
     }
 
     /**
-     * 扩展方法：复用连接更新经验（事务内 → 必须用connection.execute）
+     * 按业务类型添加经验（核心入口，兼容每日/终身规则）
      * @param userId 用户ID
-     * @param exp 经验值（正数加，负数减）
-     * @param behavior 行为描述
-     * @param connection 复用的数据库连接
+     * @param bizType 业务类型（对应expLimitConfig的key）
      * @param sourceId 来源ID（账单ID/分类ID等）
+     * @returns 操作结果
+     */
+    async addExpByBizType(
+        userId: number,
+        bizType: string,
+        sourceId: number | null = null
+    ): Promise<{
+        success: boolean;
+        message: string;
+        usedCount?: number;
+        limitCount?: number;
+        limitType?: 'lifetime' | 'daily';
+        newExp?: number;
+    }> {
+        // 1. 校验业务配置是否存在
+        const config = this.expLimitConfig[bizType];
+        if (!config) {
+            return { success: false, message: `未配置${bizType}对应的经验规则` };
+        }
+
+        // 2. 校验用户是否存在
+        const userExist = await this.checkUserExist(userId);
+        if (!userExist) {
+            return { success: false, message: `用户ID ${userId} 不存在` };
+        }
+
+        // 3. 校验行为频次限制（核心规则）
+        const limitCheck = await this.checkExpActionLimit(userId, bizType);
+        const bizRemark = config.remark;
+        const limitDesc = limitCheck.limitType === 'lifetime' ? '终身' : '今日';
+
+        // 3.1 防刷日志（和积分模块格式一致）
+        console.log(`经验：防刷校验：用户${userId} 行为${bizRemark} 本次+${config.expValue} ${limitDesc}累计${limitCheck.usedCount} 上限${limitCheck.limitCount}`);
+
+        // 3.2 校验不通过直接返回
+        if (!limitCheck.pass) {
+            const limitTip = limitCheck.limitType === 'lifetime' ? '终身仅可' : '每日最多';
+            const message = `用户${userId}${limitDesc}${bizRemark}奖励经验已达上限（${limitTip}操作${limitCheck.limitCount}次，已使用${limitCheck.usedCount}次）`;
+            console.log(message);
+            return {
+                success: false,
+                message,
+                usedCount: limitCheck.usedCount,
+                limitCount: limitCheck.limitCount,
+                limitType: limitCheck.limitType
+            };
+        }
+
+        // 4. 开启事务添加经验
+        let connection: any = null;
+        try {
+            connection = await pool.getConnection();
+            await connection.beginTransaction();
+
+            // 4.1 复用原有经验更新逻辑
+            await this.updateUserExpWithConn(
+                userId,
+                config.expValue,
+                bizRemark,
+                connection,
+                sourceId
+            );
+
+            // 4.2 检查等级升级
+            const [profileRows] = await connection.execute(
+                `SELECT level_exp FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
+                [userId]
+            );
+            const newExp = (profileRows as any[])[0]?.level_exp || 0;
+            await this.checkUserLevelUp(userId, newExp, connection);
+
+            await connection.commit();
+
+            console.log(`[经验新增成功] 用户${userId} 行为${bizRemark} 新增${config.expValue}经验 当前经验${newExp}`);
+            return {
+                success: true,
+                message: `成功为用户${userId}添加${config.expValue}经验（${bizRemark}）`,
+                usedCount: limitCheck.usedCount + 1,
+                limitCount: limitCheck.limitCount,
+                limitType: limitCheck.limitType,
+                newExp
+            };
+        } catch (error) {
+            if (connection) await connection.rollback().catch((err: any) => console.error("经验更新回滚失败：", err));
+            console.error(`[经验新增失败] 用户${userId} 行为${bizRemark}`, error);
+            return {
+                success: false,
+                message: `添加经验失败：${(error as Error).message}`,
+                usedCount: limitCheck.usedCount,
+                limitCount: limitCheck.limitCount,
+                limitType: limitCheck.limitType
+            };
+        } finally {
+            if (connection) connection.release();
+        }
+    }
+
+    /**
+     * 校验用户是否存在
+     */
+    private async checkUserExist(userId: number): Promise<boolean> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT id FROM ${this.userTableName} WHERE id = ? LIMIT 1`,
+            [userId]
+        );
+        return rows.length > 0;
+    }
+
+    /**
+     * 校验经验行为频次限制（兼容终身/每日）
+     */
+    private async checkExpActionLimit(
+        userId: number,
+        bizType: string
+    ): Promise<{
+        pass: boolean;
+        usedCount: number;
+        limitCount: number;
+        limitType: 'lifetime' | 'daily';
+    }> {
+        // 1. 获取规则配置
+        const config = this.expLimitConfig[bizType];
+        const limitType = config?.limitType || 'daily';
+        const limitCount = config?.limitCount || Infinity;
+
+        if (limitCount === Infinity) {
+            return { pass: true, usedCount: 0, limitCount, limitType };
+        }
+
+        // 2. 构造统计SQL（区分终身/每日）
+        let timeWhere = '';
+        if (limitType === 'daily') {
+            timeWhere = 'AND DATE(created_at) = CURDATE()';
+        }
+
+        // 3. 查询已使用次数（仅统计正向经验）
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT COUNT(*) AS count 
+             FROM ${this.userExpLogTableName} 
+             WHERE user_id = ? 
+               AND behavior = ? 
+               ${timeWhere}
+               AND exp_change > 0`,
+            [userId, config.remark]
+        );
+        const usedCount = Number(rows[0].count) || 0;
+
+        // 4. 判断是否通过校验
+        const pass = usedCount < limitCount;
+        return { pass, usedCount, limitCount, limitType };
+    }
+
+    /**
+     * 复用连接更新经验（原有逻辑保留）
      */
     private async updateUserExpWithConn(
         userId: number,
@@ -291,145 +418,137 @@ class UserModule {
         connection: any,
         sourceId: number | null = null
     ): Promise<void> {
-        try {
-            // 防刷校验（事务内 → connection.execute）
-            // 退回积分时跳过防刷限制
-            const canAddExp = exp > 0
-                ? await this.checkDailyExpLimit(userId, behavior, exp, connection)
-                : true;
+        // 查询当前经验
+        const [profileRows] = await connection.execute(
+            `SELECT level_exp FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
+            [userId]
+        );
+        const currentExp = (profileRows as any[])[0]?.level_exp || 0;
+        const newExp = Math.max(0, currentExp + exp);
 
-            if (!canAddExp) {
-                console.log(`用户${userId}今日${behavior}经验已达上限`);
-                return;
-            }
+        // 更新经验值
+        await connection.execute(
+            `UPDATE ${this.userProfileTableName}
+             SET level_exp = ?, updated_at = NOW()
+             WHERE user_id = ?`,
+            [newExp, userId]
+        );
 
-            // 查询当前经验（事务内）
-            const [profileRows] = await connection.execute(
-                `SELECT level_exp
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
-                [userId]
-            );
-            const currentExp = (profileRows as any[])[0]?.level_exp || 0;
-            const newExp = Math.max(0, currentExp + exp); // 经验不能为负
-
-            // 更新经验值（事务内）
-            await connection.execute(
-                `UPDATE ${this.userProfileTableName}
-                 SET level_exp = ?,
-                     updated_at = NOW()
-                 WHERE user_id = ?`,
-                [newExp, userId]
-            );
-
-            // 记录经验日志（事务内，新增source_id字段）
-            await connection.execute(
-                `INSERT INTO ${this.userExpLogTableName}
-                     (user_id, exp_change, behavior, current_exp, source_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, NOW())`,
-                [userId, exp, behavior, newExp, sourceId]
-            );
-
-        } catch (error) {
-            console.error("复用连接更新经验失败：", { userId, exp, behavior, sourceId, error });
-            throw error; // 抛出异常让外层事务回滚
-        }
+        // 记录经验日志
+        await connection.execute(
+            `INSERT INTO ${this.userExpLogTableName}
+             (user_id, exp_change, behavior, current_exp, source_id, created_at)
+             VALUES (?, ?, ?, ?, ?, NOW())`,
+            [userId, exp, behavior, newExp, sourceId]
+        );
     }
 
     /**
-     * 扩展方法：增减用户等级经验（独立事务 → 需connection.execute）
-     * @param userId 用户ID
-     * @param exp 经验值（正数加，负数减）
-     * @param behavior 行为描述
-     * @param sourceId 来源ID（账单ID/分类ID等）
+     * 完善用户信息奖励经验（适配新规则）
      */
-    async updateUserExp(
-        userId: number,
-        exp: number,
-        behavior: string,
-        sourceId: number | null = null
-    ): Promise<void> {
-        let connection: any = null;
+    async completeUserInfo(userId: number, infoType: string) {
+        const bizTypeMap = {
+            email: 'profile_email_complete',
+            profile: 'profile_info_complete',
+            avatar: 'profile_avatar_complete'
+        };
+        const bizType = bizTypeMap[infoType as keyof typeof bizTypeMap];
+        if (!bizType) return { success: false, message: '不支持的资料类型' };
+
+        return this.addExpByBizType(userId, bizType, null);
+    }
+
+    /**
+     * 新增账单奖励经验（适配新规则）
+     */
+    async addBillExp(userId: number, billId: number) {
+        return this.addExpByBizType(userId, 'bill_add', billId);
+    }
+
+    /**
+     * 检查并执行等级升级（原有逻辑保留）
+     */
+    private async checkUserLevelUp(userId: number, currentExp: number, connection?: any): Promise<void> {
+        const usePool = !connection;
+        let conn = connection;
+        if (usePool) conn = await pool.getConnection();
+
         try {
-            connection = await pool.getConnection();
-            await connection.beginTransaction();
-
-            // 防刷校验（事务内），退回积分时跳过
-            const canAddExp = exp > 0
-                ? await this.checkDailyExpLimit(userId, behavior, exp, connection)
-                : true;
-
-            if (!canAddExp) {
-                console.log(`用户${userId}今日${behavior}经验已达上限`);
-                await connection.commit(); // 无更新，提交空事务
-                return;
-            }
-
-            // 查询当前经验（事务内）
-            const [profileRows] = await connection.execute(
-                `SELECT level_exp
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
+            const [profileRows] = await conn.execute(
+                `SELECT level FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
-            const currentExp = (profileRows as any[])[0]?.level_exp || 0;
-            const newExp = Math.max(0, currentExp + exp); // 经验不能为负
+            const currentLevel = (profileRows as any[])[0]?.level || 1;
 
-            // 更新经验值（事务内）
-            await connection.execute(
-                `UPDATE ${this.userProfileTableName}
-                 SET level_exp = ?,
-                     updated_at = NOW()
-                 WHERE user_id = ?`,
-                [newExp, userId]
+            const [nextLevelRule] = await conn.execute(
+                `SELECT id, min_exp FROM ${this.userLevelRuleTableName} WHERE id > ? AND min_exp <= ? ORDER BY id ASC LIMIT 1`,
+                [currentLevel, currentExp]
             );
 
-            // 自动升级（事务内）
-            await this.checkUserLevelUp(userId, newExp, connection);
-
-            // 记录经验日志（事务内，新增source_id字段）
-            await connection.execute(
-                `INSERT INTO ${this.userExpLogTableName}
-                     (user_id, exp_change, behavior, current_exp, source_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, NOW())`,
-                [userId, exp, behavior, newExp, sourceId]
-            );
-
-            await connection.commit();
-            console.log(`[经验新增成功] 用户${userId} 新增${exp}经验`);
+            if (nextLevelRule.length > 0) {
+                const nextLevel = (nextLevelRule as any[])[0];
+                await conn.execute(
+                    `UPDATE ${this.userProfileTableName} SET level = ?, updated_at = NOW() WHERE user_id = ?`,
+                    [nextLevel.id, userId]
+                );
+                console.log(`用户${userId}升级至${nextLevel.id}级（经验${currentExp}）`);
+            }
         } catch (error) {
-            if (connection) await connection.rollback().catch((err: any) => console.error("经验更新回滚失败：", err));
-            console.error("更新经验失败：", { userId, exp, behavior, sourceId, error });
-            throw new Error(`更新经验失败：${(error as Error).message}`);
+            console.error("等级升级检查失败：", { userId, currentExp, error });
+            throw error;
         } finally {
-            if (connection) connection.release();
+            if (usePool && conn) conn.release();
         }
     }
 
     /**
-     * 新增方法：退回用户积分（删除账单/分类等操作）
-     * @param userId 用户ID
-     * @param sourceId 来源ID（账单ID/分类ID等）
-     * @param behavior 行为描述（如：删除账单、删除自定义分类）
+     * 检查并执行等级降级（原有逻辑保留）
      */
-    async rollbackUserExp(
-        userId: number,
-        sourceId: number,
-        behavior: string
-    ): Promise<void> {
+    private async checkUserLevelDown(userId: number, currentExp: number, connection: any): Promise<void> {
+        try {
+            const [profileRows] = await connection.execute(
+                `SELECT level FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
+                [userId]
+            );
+            const currentLevel = (profileRows as any[])[0]?.level || 1;
+            if (currentLevel <= 1) return;
+
+            const [currentLevelRule] = await connection.execute(
+                `SELECT min_exp FROM ${this.userLevelRuleTableName} WHERE id = ? LIMIT 1`,
+                [currentLevel]
+            );
+            const minExp = (currentLevelRule as any[])[0]?.min_exp || 0;
+
+            if (currentExp < minExp) {
+                const [prevLevelRule] = await connection.execute(
+                    `SELECT id FROM ${this.userLevelRuleTableName} WHERE id < ? ORDER BY id DESC LIMIT 1`,
+                    [currentLevel]
+                );
+                const prevLevel = (prevLevelRule as any[])[0]?.id || 1;
+                await connection.execute(
+                    `UPDATE ${this.userProfileTableName} SET level = ?, updated_at = NOW() WHERE user_id = ?`,
+                    [prevLevel, userId]
+                );
+                console.log(`用户${userId}降级至${prevLevel}级（经验${currentExp}）`);
+            }
+        } catch (error) {
+            console.error("等级降级检查失败：", { userId, currentExp, error });
+            throw error;
+        }
+    }
+
+    /**
+     * 退回用户经验（原有逻辑保留）
+     */
+    async rollbackUserExp(userId: number, sourceId: number, behavior: string): Promise<void> {
         let connection: any = null;
         try {
             connection = await pool.getConnection();
             await connection.beginTransaction();
 
-            // 1. 查询该来源ID对应的已发放经验
             const [expLogRows] = await connection.execute(
-                `SELECT id, exp_change 
-                 FROM ${this.userExpLogTableName}
-                 WHERE user_id = ? 
-                   AND source_id = ? 
-                   AND exp_change > 0
-                 ORDER BY created_at DESC LIMIT 1`,
+                `SELECT id, exp_change FROM ${this.userExpLogTableName}
+                 WHERE user_id = ? AND source_id = ? AND exp_change > 0 ORDER BY created_at DESC LIMIT 1`,
                 [userId, sourceId]
             );
 
@@ -439,24 +558,12 @@ class UserModule {
                 return;
             }
 
-            // 2. 计算需要退回的经验值（负数）
             const issuedExp = (expLogRows as any[])[0].exp_change;
-            const rollbackExp = -Math.abs(issuedExp); // 转为负数
+            const rollbackExp = -Math.abs(issuedExp);
+            await this.updateUserExpWithConn(userId, rollbackExp, behavior, connection, sourceId);
 
-            // 3. 更新用户经验（退回）
-            await this.updateUserExpWithConn(
-                userId,
-                rollbackExp,
-                behavior,
-                connection,
-                sourceId
-            );
-
-            // 4. 检查等级降级（如果需要）
             const [profileRows] = await connection.execute(
-                `SELECT level_exp 
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
+                `SELECT level_exp FROM ${this.userProfileTableName} WHERE user_id = ? LIMIT 1`,
                 [userId]
             );
             const currentExp = (profileRows as any[])[0]?.level_exp || 0;
@@ -474,186 +581,26 @@ class UserModule {
     }
 
     /**
-     * 新增内部方法：检查并执行等级降级（经验不足时）
-     * @param userId 用户ID
-     * @param currentExp 当前经验值
-     * @param connection 复用数据库连接
+     * 原有updateUserExp方法（兼容旧调用）
      */
-    private async checkUserLevelDown(
+    async updateUserExp(
         userId: number,
-        currentExp: number,
-        connection: any
+        exp: number,
+        behavior: string,
+        sourceId: number | null = null
     ): Promise<void> {
+        let connection: any = null;
         try {
-            // 查询当前等级
-            const [profileRows] = await connection.execute(
-                `SELECT level
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
-                [userId]
-            );
-            const currentLevel = (profileRows as any[])[0]?.level || 1;
-
-            // 如果是1级，无需降级
-            if (currentLevel <= 1) return;
-
-            // 查询当前等级的最低经验要求
-            const [currentLevelRule] = await connection.execute(
-                `SELECT min_exp 
-                 FROM ${this.userLevelRuleTableName}
-                 WHERE id = ? LIMIT 1`,
-                [currentLevel]
-            );
-            const minExp = (currentLevelRule as any[])[0]?.min_exp || 0;
-
-            // 经验不足当前等级要求，降级到上一级
-            if (currentExp < minExp) {
-                const [prevLevelRule] = await connection.execute(
-                    `SELECT id 
-                     FROM ${this.userLevelRuleTableName}
-                     WHERE id < ? 
-                     ORDER BY id DESC LIMIT 1`,
-                    [currentLevel]
-                );
-                const prevLevel = (prevLevelRule as any[])[0]?.id || 1;
-
-                await connection.execute(
-                    `UPDATE ${this.userProfileTableName}
-                     SET level = ?,
-                         updated_at = NOW()
-                     WHERE user_id = ?`,
-                    [prevLevel, userId]
-                );
-                console.log(`用户${userId}降级至${prevLevel}级（经验${currentExp}）`);
-            }
+            connection = await pool.getConnection();
+            await connection.beginTransaction();
+            await this.updateUserExpWithConn(userId, exp, behavior, connection, sourceId);
+            await connection.commit();
         } catch (error) {
-            console.error("等级降级检查失败：", { userId, currentExp, error });
-            throw error;
-        }
-    }
-
-    /**
-     * 内部方法：检查并执行等级升级
-     * @param userId 用户ID
-     * @param currentExp 当前经验值
-     * @param connection 复用数据库连接（有则用，无则用pool.execute）
-     */
-    private async checkUserLevelUp(userId: number, currentExp: number, connection?: any): Promise<void> {
-        // 有复用连接则用connection.execute，无则用pool.execute
-        const usePool = !connection;
-        let conn = connection;
-        if (usePool) conn = await pool.getConnection();
-
-        try {
-            // 查询当前等级（复用连接/pool）
-            const [profileRows] = await conn.execute(
-                `SELECT level
-                 FROM ${this.userProfileTableName}
-                 WHERE user_id = ? LIMIT 1`,
-                [userId]
-            );
-            const currentLevel = (profileRows as any[])[0]?.level || 1;
-
-            // 查询下一级升级规则（复用连接/pool）
-            const [nextLevelRule] = await conn.execute(
-                `SELECT id, min_exp
-                 FROM ${this.userLevelRuleTableName}
-                 WHERE id > ?
-                   AND min_exp <= ?
-                 ORDER BY id ASC LIMIT 1`,
-                [currentLevel, currentExp]
-            );
-
-            // 满足升级条件则更新等级
-            if (nextLevelRule.length > 0) {
-                const nextLevel = (nextLevelRule as any[])[0];
-                await conn.execute(
-                    `UPDATE ${this.userProfileTableName}
-                     SET level = ?,
-                         updated_at = NOW()
-                     WHERE user_id = ?`,
-                    [nextLevel.id, userId]
-                );
-                console.log(`用户${userId}升级至${nextLevel.id}级（经验${currentExp}）`);
-            }
-        } catch (error) {
-            console.error("等级升级检查失败：", { userId, currentExp, error });
+            if (connection) await connection.rollback();
             throw error;
         } finally {
-            // 仅当使用pool.getConnection()时释放连接
-            if (usePool && conn) conn.release();
+            if (connection) connection.release();
         }
-    }
-
-    /**
-     * 内部方法：校验每日经验上限（防刷）→ 事务内必须用connection.execute
-     * @param userId 用户ID
-     * @param behavior 行为类型
-     * @param exp 本次经验值
-     * @param connection 数据库连接
-     */
-    private async checkDailyExpLimit(
-        userId: number,
-        behavior: string,
-        exp: number,
-        connection: any
-    ): Promise<boolean> {
-        // 每日经验上限配置
-        const limitMap: Record<string, number> = {
-            "新增账单": 1,
-            "连续登录": 10,
-            "使用自定义分类": 1,
-            "导出账单数据": 20,
-            "连续登录7天奖励": 10,
-            "连续登录30天奖励": 50,
-            "完善邮箱信息": Infinity,
-            "完善头像信息": Infinity,
-            "创建多账本": 1,
-            "删除账单": Infinity, // 退回积分不限制
-            "删除自定义分类": Infinity // 退回积分不限制
-        };
-        const dailyLimit = limitMap[behavior] ?? Infinity;
-
-        // 无上限直接通过
-        if (dailyLimit === Infinity) return true;
-
-        // 查询今日已获取经验（事务内 → connection.execute）
-        const today = new Date().toISOString().split('T')[0]; // 统一为 YYYY-MM-DD
-        const [expLog] = await connection.execute(
-            `SELECT IFNULL(SUM(exp_change), 0) as total_exp
-       FROM ${this.userExpLogTableName}
-       WHERE user_id = ?
-         AND behavior = ?
-         AND DATE_FORMAT(created_at, '%Y-%m-%d') = ?
-         AND exp_change > 0`, // 只统计正向经验
-            [userId, behavior, today]
-        );
-        const totalTodayExp = Number((expLog as any[])[0].total_exp) || 0;
-
-        console.log(`经验：防刷校验：用户${userId} 行为${behavior} 本次+${exp} 今日累计${totalTodayExp} 上限${dailyLimit}`);
-        return (totalTodayExp + exp) <= dailyLimit;
-    }
-
-    /**
-     * 完善用户信息奖励积分
-     * @param userId 用户ID
-     * @param infoType 完善类型：email/profile/avatar
-     */
-    async completeUserInfo(userId: number, infoType: string) {
-        const expMap = {
-            email: 20,
-            profile: 10, // 生日/性别
-            avatar: 15
-        };
-        const exp = expMap[infoType as keyof typeof expMap] || 0;
-        if (exp <= 0) return;
-
-        await this.updateUserExp(
-            userId,
-            exp,
-            `完善${infoType}信息`,
-            null // 完善信息无source_id，传null
-        );
     }
 }
 

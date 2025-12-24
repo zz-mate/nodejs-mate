@@ -4,18 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="新增日志输出">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="新增资产分类">
+      <change afterPath="$PROJECT_DIR$/src/controllers/miniProgram/compensationController.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/routes/miniProgram/compensationRoutes.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/accountCategoryController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/accountCategoryController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/middlewares/logger.middleware.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/middlewares/logger.middleware.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AccountCategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AccountCategoryModule.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/routes/miniProgram/accountCategoryRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/miniProgram/accountCategoryRoutes.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/accountCategoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/accountCategoryService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/routes/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,24 +65,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "dev",
-    "last_opened_file_path": "/Users/atong/Desktop/mate-code/nodejs-mate",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "pnpm",
-    "settings.editor.selected.configurable": "preferences.lookFeel",
-    "ts.external.directory.path": "/Users/atong/Desktop/mate-code/nodejs-mate/node_modules/typescript/lib",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;dev&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/atong/Desktop/mate-code/nodejs-mate&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;pnpm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/Users/atong/Desktop/mate-code/nodejs-mate/node_modules/typescript/lib&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/src/routes/miniProgram" />
@@ -137,7 +133,8 @@
       <workItem from="1766421485221" duration="8000" />
       <workItem from="1766450506044" duration="12597000" />
       <workItem from="1766483421136" duration="15415000" />
-      <workItem from="1766579488819" duration="1651000" />
+      <workItem from="1766579488819" duration="1729000" />
+      <workItem from="1766583305336" duration="5655000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -211,7 +208,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766490589186</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="新增资产分类">
+      <option name="closed" value="true" />
+      <created>1766582570626</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1766582570626</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -239,7 +244,8 @@
     <MESSAGE value="修改sql配置" />
     <MESSAGE value="优化用户积分&amp;经验" />
     <MESSAGE value="新增日志输出" />
-    <option name="LAST_COMMIT_MESSAGE" value="新增日志输出" />
+    <MESSAGE value="新增资产分类" />
+    <option name="LAST_COMMIT_MESSAGE" value="新增资产分类" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -251,7 +257,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts</url>
-          <line>190</line>
+          <line>191</line>
           <option name="timeStamp" value="5" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">

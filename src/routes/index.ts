@@ -16,6 +16,7 @@ import userRoutes from './miniProgram/userRoutes'
 import calendarRoutes from './miniProgram/calendarRoutes'
 import bookCategoryRoutes from './miniProgram/bookCategoryRoutes'
 import pointRoutes from './miniProgram/pointRoutes'
+import compensationRoutes from './miniProgram/compensationRoutes'
 router.use(demoRoutes);
 router.use(authRoutes);
 router.use(billRoutes);
@@ -29,6 +30,7 @@ router.use(userRoutes);
 router.use(calendarRoutes);
 router.use(bookCategoryRoutes);
 router.use(pointRoutes);
+router.use(compensationRoutes);
 
 
 

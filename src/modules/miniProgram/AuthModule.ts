@@ -6,6 +6,7 @@ import {generateToken} from '../../utils/tokenUtils';
 import HttpError from "../../utils/HttpError";
 import UsernameGenerator from '../../tools/usernameGenerator';
 import pointModule from "./PointModule";
+import userModule from "./UserModule";
 class AuthModule {
     userTableName = 'mate_user';
     bookTableName = 'mate_book';
@@ -204,7 +205,7 @@ class AuthModule {
                 '新用户注册奖励积分', // 备注
                 (result as any).insertId // 业务ID：账单ID（防重复发放）
             );
-
+            await userModule.updateUserExp(defaultProfileData.user_id, 5, "新用户注册", (result as any).insertId)
             const safeUser = this.formatSafeUser(newUser);
             return generateToken(safeUser);
 

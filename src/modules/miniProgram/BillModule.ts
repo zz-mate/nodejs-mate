@@ -63,7 +63,8 @@ class BillModule {
                 await this.updateBudgetActualAmountAfterBillCreate(defaultData);
             }
             /***新增经验 & 积分**START*/
-            await userModule.updateUserExp(defaultData.user_id, 1, "新增账单", (result as any).insertId)
+            await userModule.addBillExp(defaultData.user_id,  (result as any).insertId);
+            // await userModule.addExpByBizType(defaultData.user_id, 'bill_add', (result as any).insertId);
             await pointModule.addPoints(
                 defaultData.user_id,
                 1, // 奖励1积分
