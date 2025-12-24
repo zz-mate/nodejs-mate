@@ -7,13 +7,12 @@ export const accountCategoryCreateService = async (data: any) => {
     let result = await accountCategoryModule.create(userId);
     return result
 }
-export const accountCategoryListService = async (req: Request,res:Response) => {
+export const accountCategoryListService = async (req: Request, res: Response) => {
     try {
-        const {userId, page, pageSize,parentId} = req.body
-
-        return  await accountCategoryModule.accountList(userId,page, pageSize,parentId);
-
-    }catch (err) {
+        const {userId, page, pageSize, parentId} = req.body
+        console.log(req.body)
+       return   await accountCategoryModule.accountCategoryList(userId, page, pageSize, parentId);
+    } catch (err) {
         // @ts-ignore
         res.status(err.status).json({
             // @ts-ignore
@@ -22,4 +21,9 @@ export const accountCategoryListService = async (req: Request,res:Response) => {
             message: err.message
         })
     }
+}
+
+export  const accountIndexCategoryListService=async (req: Request, res: Response) => {
+    const { parentId} = req.body
+    return   await accountCategoryModule.accountIndexCategoryList(parentId);
 }

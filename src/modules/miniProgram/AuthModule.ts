@@ -5,6 +5,7 @@ import type {UserDbSchema} from "../../types";
 import {generateToken} from '../../utils/tokenUtils';
 import HttpError from "../../utils/HttpError";
 import UsernameGenerator from '../../tools/usernameGenerator';
+import pointModule from "./PointModule";
 class AuthModule {
     userTableName = 'mate_user';
     bookTableName = 'mate_book';
@@ -196,6 +197,14 @@ class AuthModule {
                 id: userId,
                 default_book_id: bookId,
             };
+            await pointModule.addPoints(
+                userId,
+                10, // 奖励1积分
+                'activity_new_user', // 业务类型：添加账单
+                '新用户注册奖励积分', // 备注
+                (result as any).insertId // 业务ID：账单ID（防重复发放）
+            );
+
             const safeUser = this.formatSafeUser(newUser);
             return generateToken(safeUser);
 

@@ -23,10 +23,12 @@
     "jimp": "^1.6.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.6.5",
+    "pinyin": "^4.0.0",
     "pm2": "^6.0.14",
     "qrcode": "^1.5.4",
     "uuid": "8.3.2",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

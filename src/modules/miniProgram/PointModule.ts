@@ -41,6 +41,8 @@ class PointModule {
         profile_update_address: { limitType: 'lifetime', limitCount: 1, remark: '修改收货地址' },
         // 其他通用场景（每日限制）
         task_complete: { limitType: 'daily', limitCount: 5, remark: '完成日常任务' },
+    //     活动
+        activity_new_user:{limitType: 'lifetime', limitCount: 1, remark: '新用户' }
     };
 
     /**

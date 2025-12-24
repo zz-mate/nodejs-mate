@@ -1,4 +1,5 @@
 import { createLogger, format, transports, type Logger } from 'winston';
+import 'winston-daily-rotate-file'; // 导入每日轮转文件传输器
 import { join } from 'path';
 import fs from 'fs';
 import type { Request, Response, NextFunction } from 'express';
@@ -18,15 +19,19 @@ export interface LoggerConfig {
     maxSize: string;
     maxFiles: number;
     enableHttpLogging?: boolean;
+    datePattern?: string; // 新增日期格式配置
 }
 
 // 默认配置
+
 const DEFAULT_CONFIG: LoggerConfig = {
     logDir: getLogDir(),
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     maxSize: '20m',
-    maxFiles: process.env.NODE_ENV === 'production' ? 30 : 14,
-    enableHttpLogging: true
+    // @ts-ignore
+    maxFiles: process.env.NODE_ENV === 'production' ? '30d' : '14d', // 修改为天数格式
+    enableHttpLogging: true,
+    datePattern: 'YY-MM-DD' // 日期格式：年-月-日
 };
 
 // 确保日志目录存在
@@ -36,7 +41,7 @@ const ensureLogDir = (dir: string): void => {
     }
 };
 
-// 🔥 核心修改：控制台只输出纯文本，无JSON对象
+// 控制台只输出纯文本，无JSON对象
 const consoleLogFormat = format.combine(
     format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     format.colorize({ all: true }),
@@ -53,7 +58,7 @@ const createCoreLogger = (config: LoggerConfig = DEFAULT_CONFIG): Logger => {
     return createLogger({
         level: config.level,
         format: format.combine(
-            format.timestamp(),
+            format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
             format.errors({ stack: true })
         ),
         transports: [
@@ -62,19 +67,27 @@ const createCoreLogger = (config: LoggerConfig = DEFAULT_CONFIG): Logger => {
                 format: consoleLogFormat,
                 silent: false
             }),
-            new transports.File({
-                filename: join(config.logDir, 'app.log'),
-                maxsize: 20 * 1024 * 1024,
-                maxFiles: config.maxFiles,
+            // 替换为每日轮转的文件传输器 - 普通日志
+            new transports.DailyRotateFile({
+                filename: join(config.logDir, 'app-%DATE%.log'), // %DATE% 会被替换为指定的日期格式
+                datePattern: config.datePattern, // 使用配置的日期格式
+                maxSize: config.maxSize, // 单个文件最大大小
+                maxFiles: config.maxFiles, // 保留的文件数量/天数
                 level: 'info',
-                format: format.combine(format.json())
+                format: format.combine(format.json()),
+                zippedArchive: true, // 压缩旧日志文件
+                utc: false // 使用本地时间
             }),
-            new transports.File({
-                filename: join(config.logDir, 'error.log'),
-                maxsize: 20 * 1024 * 1024,
-                maxFiles: 30,
+            // 替换为每日轮转的文件传输器 - 错误日志
+            new transports.DailyRotateFile({
+                filename: join(config.logDir, 'error-%DATE%.log'),
+                datePattern: config.datePattern,
+                maxSize: config.maxSize,
+                maxFiles: '30d', // 错误日志保留30天
                 level: 'error',
-                format: format.combine(format.json())
+                format: format.combine(format.json()),
+                zippedArchive: true,
+                utc: false
             })
         ],
         silent: false,
@@ -132,7 +145,7 @@ export const createHttpLoggerMiddleware = (config: LoggerConfig = DEFAULT_CONFIG
             const duration = Date.now() - start;
             const { statusCode, statusMessage } = res;
 
-            // 🔥 构建纯文本HTTP日志消息
+            // 构建纯文本HTTP日志消息
             const logMessage = `HTTP ${statusCode} ${statusMessage} | ${method || 'UNKNOWN'} |  ${originalUrl || 'UNKNOWN'} | 耗时: ${duration}ms | IP: ${ip || headers['x-forwarded-for'] || headers['remote-addr'] || 'UNKNOWN'} | UA: ${headers['user-agent'] || 'UNKNOWN'}`;
 
             if (statusCode >= 500) {
