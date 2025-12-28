@@ -286,6 +286,7 @@ class CalendarModule {
                 book_id: item.book_id,
                 created_at: item.created_at,
                 updated_at: item.updated_at,
+                status:true,
                 // 分类信息（空值返回空对象）
                 category: item.c_id ? {
                     id: item.c_id,
@@ -374,6 +375,7 @@ class CalendarModule {
                 list: Array<{          // 替换detail为list，新增date+百分比字段
                     day: number;       // 日期数字（1-31）
                     date: string;      // 完整日期 YYYY-MM-DD
+                    dateStr:string,
                     amount: string;    // 当日金额（收入/支出/结余）
                     count: number;     // 当日笔数（仅当前type对应的笔数）
                     ratio: number;     // 当日金额占最高金额比例（0-1）
@@ -480,7 +482,26 @@ class CalendarModule {
             const d = day.toString().padStart(2, '0');
             return `${year}-${m}-${d}`;
         };
+        /**
+         * 将 "YYYY-MM-DD" 格式转换为 "YYYY年MM月DD日"
+         * @param {string} dateStr - 日期字符串（如：2025-12-26）
+         * @returns {string} 格式化后的日期（如：2025年12月26日）
+         */
+        const formatDateToCN = (dateStr:string)=> {
+            // 空值/非法值处理
+            if (!dateStr) return '';
 
+            // 替换分隔符（兼容 - / . 等分隔符）
+            const normalized = dateStr.replace(/[-/.]/g, '-');
+            // 分割年/月/日
+            const [year, month, day] = normalized.split('-');
+
+            // 合法性校验
+            if (!year || !month || !day) return dateStr;
+
+            // 拼接中文格式
+            return `${year}年${month}月${day}日`;
+        }
         try {
             // 2. 解析时间，生成xData和初始化数据
             const { year, month } = parseDateStr(start_time);
@@ -647,6 +668,7 @@ class CalendarModule {
                 const defaultBillTime = formatDate(year, month, day) + 'T00:00:00.000Z';
                 const dayData = dayMap.get(day) || {
                     date: formatDate(year, month, day),
+                    dateStr:`${year}年${month}月${day}日`,
                     bill_time: defaultBillTime,
                     income: "0.00",
                     expense: "0.00",
@@ -699,6 +721,7 @@ class CalendarModule {
             const tempLineList: Array<{
                 day: number;
                 date: string;
+                dateStr: string;
                 bill_time: string;
                 amount: string;
                 count: number;
@@ -726,6 +749,7 @@ class CalendarModule {
                     tempLineList.push({
                         day: item.day,
                         date: item.date,
+                        dateStr:formatDateToCN(item.date),
                         bill_time: item.bill_time,
                         amount: item.amountStr,
                         count: item.count,

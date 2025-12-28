@@ -2,7 +2,7 @@
  class DemoModule {
 
     async findAll() {
-        return "build test demoModel2 ";
+        return true;
     }
 }
 export default new DemoModule();

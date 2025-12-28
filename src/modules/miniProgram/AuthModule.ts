@@ -13,21 +13,22 @@ class AuthModule {
     userProfileTableName = 'mate_user_profile';
 
     // 根据手机号查询用户
-    async findByPhone(phone: string): Promise<UserDbSchema | null> {
+    async findByPhone(phone: string,openid:string): Promise<UserDbSchema | null> {
         const [rows] = await pool.execute(
             `SELECT *
              FROM ${this.userTableName}
-             WHERE phone = ? LIMIT 1`,
-            [phone]
+             WHERE phone = ? OR  openid = ? LIMIT 1`,
+            [phone,openid]
         );
-        const user = (rows as UserDbSchema[])[0];
+        // console.log(rows);
+        const user = (rows as UserDbSchema[])[0]
         return user || null;
     }
 
     /**
      * 创建新用户（修复事务连接问题）
      */
-    async createUser(phone: string): Promise<string> {
+    async createUser(phone: string,openid:string): Promise<string> {
         // 前置校验
         if (!phone || phone.length !== 11) {
             throw new HttpError("手机号格式错误", 400);
@@ -38,6 +39,7 @@ class AuthModule {
         const defaultData = {
             username: phone,
             uuid: uuidv4(),
+            openid:openid,
             phone: phone,
             email: null,
             password: hashedPassword,
@@ -72,12 +74,13 @@ class AuthModule {
             // ===== 4. 插入用户表（使用connection.execute而非pool.execute）=====
             const [result] = await connection.execute(
                 `INSERT INTO ${this.userTableName}
-             (username, uuid, phone, email, password, nickname, avatar, gender, birthday, is_active, role,
+             (username, uuid,openid, phone, email, password, nickname, avatar, gender, birthday, is_active, role,
               last_login_at, created_at, updated_at, deleted_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?)`,
                 [
                     defaultData.username,
                     defaultData.uuid,
+                    defaultData.openid,
                     defaultData.phone,
                     defaultData.email,
                     defaultData.password,
@@ -256,13 +259,14 @@ class AuthModule {
     }
 
     // 更新最后登录时间
-    async updateLastLogin(id: number): Promise<void> {
+    async updateLastLogin(id: number,openid:string): Promise<void> {
         await pool.execute(
             `UPDATE ${this.userTableName}
              SET last_login_at = ?,
-                 updated_at = ?
+                 updated_at = ?,
+                 openid = ?
              WHERE id = ?`,
-            [new Date(), new Date(), id]
+            [new Date(), new Date(),openid, id]
         );
     }
 

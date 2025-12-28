@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 🔥 优化1：启动日志改为纯文本，无对象
-logger.info(`✅ 应用初始化完成 | 环境: ${config.nodeEnv} | 端口: ${config.port} | 已加载中间件: cors, json, urlencoded`);
+logger.info(`✅ 应用初始化完成 | 环境: ${config.nodeEnv} | 端口: ${config.port} | 数据库：${process.env.DB_NAME}`);
 
 // 挂载路由
 app.use('/api/v1', routes);

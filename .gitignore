@@ -9,11 +9,7 @@ out/
 sql/
 logs/
 # 环境变量文件（包含数据库密码、端口等敏感信息）
-.env
-.env.local
-.env.development.local
-.env.production.local
-.env.test.local
+.env.*
 
 # npm/yarn/pnpm 锁文件（可选忽略，建议团队统一是否提交）
 # package-lock.json
@@ -31,7 +27,6 @@ Thumbs.db       # Windows 系统文件
 
 # ===================== 日志/临时文件 =====================
 # 日志文件
-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

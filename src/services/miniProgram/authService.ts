@@ -19,7 +19,8 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
      * - 不存在用户：自动注册 → 返回新用户信息+token
      */
         // @ts-ignore
-    const {phone} = req.body
+    const {phone,openid} = req.body
+    console.log(phone,openid)
     // 1. 手机号格式化（防呆：即使入参是字符串，也做trim和格式校验）
     const phoneStr = phone.trim();
     if (!/^1[3-9]\d{9}$/.test(phoneStr)) {
@@ -27,8 +28,8 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
         throw new HttpError(`手机号格式不正确，请输入11位有效手机号`, 403);
     }
     // 2. 查询用户是否存在
-    const existingUser = await authModel.findByPhone(phoneStr);
-
+    const existingUser = await authModel.findByPhone(phoneStr,openid);
+    console.log(existingUser)
     // 3. 存在用户：校验状态 + 更新登录时间
     if (existingUser) {
         // 用枚举替代数字，简化条件判断（核心优化点）
@@ -39,7 +40,7 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
                 throw new HttpError(`账户已注销，无法登录`, 403);
             case 1: // 1-正常（核心分支）
                 // 3-1.更新最后登录时间
-                await authModel.updateLastLogin(existingUser.id!);
+                await authModel.updateLastLogin(existingUser.id!,openid);
                 // 3-2.格式化用户信息（隐藏敏感字段）
                 const safeUser = authModel.formatSafeUser(existingUser);
                 // 3-3.生成Token
@@ -51,7 +52,7 @@ export const loginByPhoneService = async (req: Request, res: Response) => {
     }
     // 4. 用户不存在： 创建新用户
     try {
-        const token = await authModel.createUser(phone);
+        const token = await authModel.createUser(phone,openid);
         return {token}
     }catch (error) {
         // @ts-ignore

@@ -1,0 +1,1 @@
+export  const WXAPI:string = "https://api.weixin.qq.com"

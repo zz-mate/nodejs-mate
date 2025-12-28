@@ -80,8 +80,8 @@ export const createBillService = async function (req: BillRequest, res: Response
 
 export const billListService = async function (req: Request, res: Response<ApiResponse>) {
     try {
-        const {userId, page, pageSize,start_time,end_time,bookId,type} = req.body
-        return await billModule.billList(userId, page, pageSize, start_time,end_time,bookId,type)
+        const {userId, page, pageSize,start_time,end_time,bookId,type,categoryId} = req.body
+        return await billModule.billList(userId, page, pageSize, start_time,end_time,bookId,type,categoryId)
     }catch (err) {
         // @ts-ignore
         res.status(err.status).json({

@@ -335,12 +335,7 @@ class BillModule {
             actualAmount = 0.00; // 兜底赋值
         }
 
-        console.log("更新主预算参数：", {
-            budgetId,
-            actualAmount,
-            budgetIdValid: Number.isInteger(budgetId) && budgetId > 0,
-            actualAmountValid: actualAmount >= 0
-        });
+        console.log("更新主预算参数：", {budgetId,actualAmount,budgetIdValid: Number.isInteger(budgetId) && budgetId > 0,actualAmountValid: actualAmount >= 0});
 
         // 6. 更新主预算实际支出（核心修复：增加强校验+错误捕获+日志）
         if (Number.isInteger(budgetId) && budgetId > 0 && actualAmount >= 0) {
@@ -379,7 +374,7 @@ class BillModule {
                           WHERE id = ${budgetId}`
                 });
                 // 可选：抛出错误或继续执行
-                // throw new HttpError(`更新预算实际支出失败：${error.message}`, 500);
+                throw new HttpError(`更新预算实际支出失败：${error.message}`, 500);
             }
         } else {
             console.error("更新主预算条件不满足：", {
@@ -574,17 +569,28 @@ class BillModule {
                  FROM mate_budget b
                           LEFT JOIN mate_book bo ON b.book_id = bo.id
                  WHERE b.id = ?
-                   AND b.user_id = ? LIMIT 1`,
+                   AND b.user_id = ? AND b.amount>0 LIMIT 1`,
                 [budgetId, userId]
             );
 
             // 3. 无数据处理
             if (!rows || (rows as any[]).length === 0) {
+                // return {
+                //     code: 404,
+                //     data: {},
+                //     message: "预算不存在或不属于当前用户"
+                // };
                 return {
-                    code: 404,
-                    data: {},
-                    message: "预算不存在或不属于当前用户"
-                };
+                    code: 200,
+                    data: {
+                        remaining_amount: "0.00",
+                        remaining_percent: 100,
+                        amount: "0.00",
+                        remaining_daily_amount: 0,
+                        surplus_amount: "0.00"
+                    },
+                    message: "查询预算详情成功"
+                }
             }
 
             // 4. 数据重组 + 每日可消费金额计算
@@ -694,6 +700,8 @@ class BillModule {
 
             // 执行查询
             const [rows] = await pool.execute(querySql, queryParams);
+            // @ts-ignore
+            rows.forEach((item) => {item.status=true})
             return rows; // 直接返回SQL格式化后的结果，包含剩余金额字段
         } catch (error) {
             console.error('查询预算分类失败：', error);

@@ -46,3 +46,19 @@ export const createBudgetCategoryService = async (req: BudgetCategoryRequest, re
 
 }
 
+export const deleteBudgetCategoryService = async (req: Request, res: Response) => {
+    try {
+        let {userId,budgetCategoryId,categoryId} = req.body
+        let result = await budgetCategoryModule.delete(userId,budgetCategoryId,categoryId)
+        // @ts-ignore
+        if (result.affectedRows == 1) {
+            return res.status(200).json({
+                code: 200,
+                message:"删除成功",
+                data: null
+            });
+        }
+    }catch (e) {
+
+    }
+}
