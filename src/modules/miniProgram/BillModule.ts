@@ -1,16 +1,21 @@
-import pool from '../../db';
-import type {UserDbSchema, BillDbSchema, ApiResponse, PaginationData} from "../../types";
-import {v4 as uuidv4} from "uuid";
-import dayjs from 'dayjs';
-import {formatAmount, parseJsonToArray} from "../../utils/tools"
-import HttpError from '../../utils/HttpError';
+import pool from "../../db";
+import type {
+    UserDbSchema,
+    BillDbSchema,
+    ApiResponse,
+    PaginationData,
+} from "../../types";
+import { v4 as uuidv4 } from "uuid";
+import dayjs from "dayjs";
+import { formatAmount, parseJsonToArray } from "../../utils/tools";
+import HttpError from "../../utils/HttpError";
 import userModule from "./UserModule";
 import pointModule from "./PointModule";
 
 class BillModule {
-    billTableName = 'mate_bill';
-    private budgetTableName = 'mate_budget';
-    private budgetCategoryTableName = 'mate_budget_category';
+    billTableName = "mate_bill";
+    private budgetTableName = "mate_budget";
+    private budgetCategoryTableName = "mate_budget_category";
 
     /**
      * 创建账单
@@ -25,9 +30,9 @@ class BillModule {
             consume_user_id: params.consume_user_id,
             category_id: params.category_id,
             amount: params.amount,
-            remark: params.remark || '',
+            remark: params.remark || "",
             type: params.type, // 2=支出，1=收入
-            currency: params.currency || 'CNY',
+            currency: params.currency || "CNY",
             bill_time: params.bill_time,
             tags: params.tags || null,
             created_at: new Date(),
@@ -63,13 +68,16 @@ class BillModule {
                 await this.updateBudgetActualAmountAfterBillCreate(defaultData);
             }
             /***新增经验 & 积分**START*/
-            await userModule.addBillExp(defaultData.user_id,  (result as any).insertId);
+            await userModule.addBillExp(
+                defaultData.user_id,
+                (result as any).insertId
+            );
             // await userModule.addExpByBizType(defaultData.user_id, 'bill_add', (result as any).insertId);
             await pointModule.addPoints(
                 defaultData.user_id,
                 1, // 奖励1积分
-                'bill_add', // 业务类型：添加账单
-                '新增账单奖励积分', // 备注
+                "bill_add", // 业务类型：添加账单
+                "新增账单奖励积分", // 备注
                 (result as any).insertId // 业务ID：账单ID（防重复发放）
             );
             /***新增经验 & 积分**END*/
@@ -107,7 +115,7 @@ class BillModule {
                 return;
             }
 
-            // 2. 重新计算该预算周期的总实际支出
+            // 2. 重新计算该预算周期的总实际支出（添加 is_deleted=0）
             const totalActualAmount = await this.calculateBudgetActualExpense(
                 billData.user_id,
                 billData.book_id,
@@ -117,28 +125,22 @@ class BillModule {
 
             // 3. 更新主预算表的实际支出
             await pool.execute(
-                // `UPDATE ${this.budgetTableName}
-                //  SET actual_amount = ?,
-                //      updated_at    = NOW()
-                //  WHERE id = ?`,
-                // [totalActualAmount, budget.id]
-
                 `UPDATE ${this.budgetTableName}
                  SET actual_amount     = ?,
-                     -- 同步计算主预算的剩余百分比（保留负数，仅防护除以0）
                      remaining_percent = IF(
-                             amount = 0, -- 主预算金额为0时，百分比设为0
+                             amount = 0,
                              0,
-                             ROUND(((amount - ?) / amount) * 100, 2) -- 保留负数，无范围限制
+                             ROUND(((amount - ?) / amount) * 100, 2)
                                          ),
-                     updated_at        = NOW() -- 补充更新时间（可选，建议加）
+                     updated_at        = NOW()
                  WHERE id = ?`,
-                // 参数顺序：actualAmount → 用于计算百分比的实际支出 → budgetId
                 [totalActualAmount, totalActualAmount, budget.id]
             );
-            console.log(`✅ 主预算ID ${budget.id} 实际支出更新为：${totalActualAmount}元`);
+            console.log(
+                `✅ 主预算ID ${budget.id} 实际支出更新为：${totalActualAmount}元`
+            );
 
-            // 4. 重新计算该分类在该预算周期的实际支出
+            // 4. 重新计算该分类在该预算周期的实际支出（添加 is_deleted=0）
             const categoryActualAmount = await this.calculateCategoryActualExpense(
                 billData.user_id,
                 billData.book_id,
@@ -155,23 +157,21 @@ class BillModule {
                 [budget.id, billData.category_id]
             );
 
-            // @ts-ignore
-            // console.log(rows[0].category_amount);
-            //--------
-            // const newCategoryActual = Math.max(0, Number(category_current_actual) - Number(deleted_amount));
-            // const categoryTotalBudget = Number(bill.category_total_budget) || 0;
-
-            // 核心修正：允许负数百分比
-
-            let categoryRemainingPercent = 0
-            // @ts-ignore
+            let categoryRemainingPercent = 0;
+            let budgetCategory = (rows as any[])[0];
+          // @ts-ignore
             if (rows[0].category_amount > 0) {
-                // @ts-ignore
-                categoryRemainingPercent = Number(((rows[0].category_amount - categoryActualAmount) / rows[0].category_amount * 100).toFixed(2));
+                categoryRemainingPercent = Number(
+                    (
+                        ((budgetCategory.category_amount - categoryActualAmount) /
+                            budgetCategory.category_amount) *
+                        100
+                    ).toFixed(2)
+                );
             } else {
                 categoryRemainingPercent = 0;
             }
-            console.log(categoryRemainingPercent)
+            console.log(categoryRemainingPercent);
             await pool.execute(
                 `UPDATE ${this.budgetCategoryTableName}
                  SET category_actual_amount = ?,
@@ -179,26 +179,36 @@ class BillModule {
                      updated_at             = NOW()
                  WHERE budget_id = ?
                    AND category_id = ?`,
-                [categoryActualAmount, categoryRemainingPercent, budget.id, billData.category_id]
+                [
+                    categoryActualAmount,
+                    categoryRemainingPercent,
+                    budget.id,
+                    billData.category_id,
+                ]
             );
 
-            console.log(`✅ 预算ID ${budget.id} 分类ID ${billData.category_id} 实际支出更新为：${categoryActualAmount}元`);
+            console.log(
+                `✅ 预算ID ${budget.id} 分类ID ${billData.category_id} 实际支出更新为：${categoryActualAmount}元`
+            );
         } catch (error: any) {
             console.error(`⚠️ 更新预算实际支出失败：${error.message}`, error);
-            // 不抛出错误，避免影响账单创建（预算更新失败不回滚账单）
         }
     }
 
     // ========== 辅助方法：根据账单时间匹配所属预算 ==========
-    private async getBudgetByBillTime(user_id: number, book_id: number, billTime: dayjs.Dayjs): Promise<{
+    private async getBudgetByBillTime(
+        user_id: number,
+        book_id: number,
+        billTime: dayjs.Dayjs
+    ): Promise<{
         id: number;
         cycle_start: string;
         cycle_end: string;
-        cycle_type: string
+        cycle_type: string;
     } | null> {
         // 构造不同周期的查询条件
-        const billDate = billTime.format('YYYY-MM-DD');
-        let querySql = '';
+        const billDate = billTime.format("YYYY-MM-DD");
+        let querySql = "";
         let queryParams: any[] = [];
 
         // 优先匹配精准周期（按 day/week/month/year/custom 顺序）
@@ -214,18 +224,29 @@ class BillModule {
         queryParams = [user_id, book_id, billDate, billDate];
 
         const [rows] = await pool.execute(querySql, queryParams);
-        const budgetList = rows as Array<{ id: number; cycle_start: string; cycle_end: string; cycle_type: string }>;
+        const budgetList = rows as Array<{
+            id: number;
+            cycle_start: string;
+            cycle_end: string;
+            cycle_type: string;
+        }>;
         return budgetList.length > 0 ? budgetList[0] : null;
     }
 
-    // ========== 辅助方法：计算预算周期总实际支出（复用你原有的逻辑） ==========
-    private async calculateBudgetActualExpense(user_id: number, book_id: number, cycle_start: string, cycle_end: string): Promise<number> {
+    // ========== 辅助方法：计算预算周期总实际支出（添加 is_deleted=0） ==========
+    private async calculateBudgetActualExpense(
+        user_id: number,
+        book_id: number,
+        cycle_start: string,
+        cycle_end: string
+    ): Promise<number> {
         const [rows] = await pool.execute(
             `SELECT IFNULL(SUM(amount), 0) AS total_expense
              FROM ${this.billTableName}
              WHERE user_id = ?
                AND book_id = ?
                AND type = 2
+               AND is_deleted = 0  -- 新增：过滤逻辑删除的账单
                AND bill_time BETWEEN ? AND ?`,
             [user_id, book_id, cycle_start, cycle_end]
         );
@@ -235,8 +256,14 @@ class BillModule {
         return Math.round(Number(rawTotal) * 100) / 100;
     }
 
-    // ========== 辅助方法：计算分类实际支出（复用你原有的逻辑） ==========
-    private async calculateCategoryActualExpense(user_id: number, book_id: number, cycle_start: string, cycle_end: string, category_id: number): Promise<number> {
+    // ========== 辅助方法：计算分类实际支出（添加 is_deleted=0） ==========
+    private async calculateCategoryActualExpense(
+        user_id: number,
+        book_id: number,
+        cycle_start: string,
+        cycle_end: string,
+        category_id: number
+    ): Promise<number> {
         const [rows] = await pool.execute(
             `SELECT IFNULL(SUM(amount), 0) AS total_expense
              FROM ${this.billTableName}
@@ -244,6 +271,7 @@ class BillModule {
                AND book_id = ?
                AND type = 2
                AND category_id = ?
+               AND is_deleted = 0  -- 新增：过滤逻辑删除的账单
                AND bill_time BETWEEN ? AND ?`,
             [user_id, book_id, category_id, cycle_start, cycle_end]
         );
@@ -253,7 +281,16 @@ class BillModule {
         return Math.round(Number(rawTotal) * 100) / 100;
     }
 
-    async billList(userId: number, page?: number, pageSize?: number, start_time?: string, end_time?: string, bookId?: number, type?: number | null | undefined, categoryId?: number): Promise<any> {
+    async billList(
+        userId: number,
+        page?: number,
+        pageSize?: number,
+        start_time?: string,
+        end_time?: string,
+        bookId?: number,
+        type?: number | null | undefined,
+        categoryId?: number
+    ): Promise<any> {
         // 金额格式化工具函数
         const formatAmount = (amount: number): string => {
             return amount.toFixed(2);
@@ -273,35 +310,38 @@ class BillModule {
             let defaultEnd = new Date(now.getTime());
             let isDateLevelQuery = false;
 
-            // 查询用户账单的实际时间边界
+            // 查询用户账单的实际时间边界（添加 is_deleted=0）
             const getBillTimeBoundary = async (userId: number, bookId?: number) => {
-                let boundaryConditions: string[] = ['b.user_id = ?'];
+                let boundaryConditions: string[] = ["b.user_id = ?", "b.is_deleted = 0"]; // 新增
                 let boundaryParams: (number | null)[] = [userId];
 
                 if (bookId !== null && bookId !== undefined && Number(bookId) > 0) {
-                    boundaryConditions.push('b.book_id = ?');
+                    boundaryConditions.push("b.book_id = ?");
                     boundaryParams.push(Number(bookId));
                 }
 
                 const [boundaryRows] = await pool.execute(
                     `SELECT IFNULL(MIN(b.bill_time), '1970-01-01 00:00:00') AS min_time,
-                        IFNULL(MAX(b.bill_time), NOW())                 AS max_time
-                 FROM ${this.billTableName} b
-                 WHERE ${boundaryConditions.join(' AND ')}`,
+                            IFNULL(MAX(b.bill_time), NOW())                 AS max_time
+                     FROM ${this.billTableName} b
+                     WHERE ${boundaryConditions.join(" AND ")}`,
                     boundaryParams
                 );
 
-                const minTimeStr = (boundaryRows as any[])[0]?.min_time || '1970-01-01 00:00:00';
-                const maxTimeStr = (boundaryRows as any[])[0]?.max_time || new Date().toISOString().slice(0, 19).replace('T', ' ');
+                const minTimeStr =
+                    (boundaryRows as any[])[0]?.min_time || "1970-01-01 00:00:00";
+                const maxTimeStr =
+                    (boundaryRows as any[])[0]?.max_time ||
+                    new Date().toISOString().slice(0, 19).replace("T", " ");
 
                 return {
                     minTime: new Date(minTimeStr),
-                    maxTime: new Date(maxTimeStr)
+                    maxTime: new Date(maxTimeStr),
                 };
             };
 
             if (!start_time && !end_time) {
-                const {minTime, maxTime} = await getBillTimeBoundary(userId, bookId);
+                const { minTime, maxTime } = await getBillTimeBoundary(userId, bookId);
                 defaultStart = minTime;
                 defaultEnd = maxTime;
             }
@@ -309,9 +349,9 @@ class BillModule {
             // 时间格式化函数
             const formatTimeByRule = (date: Date, isDateLevel: boolean): string => {
                 const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, "0");
                 if (isDateLevel) {
-                    const day = String(date.getDate()).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, "0");
                     return `${year}-${month}-${day}`;
                 }
                 return `${year}-${month}`;
@@ -319,73 +359,77 @@ class BillModule {
 
             const formatToFullTime = (date: Date): string => {
                 const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                const seconds = String(date.getSeconds()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                const hours = String(date.getHours()).padStart(2, "0");
+                const minutes = String(date.getMinutes()).padStart(2, "0");
+                const seconds = String(date.getSeconds()).padStart(2, "0");
                 return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
             };
 
-            const getPeriodTime = (timeStr: string): {
+            const getPeriodTime = (
+                timeStr: string
+            ): {
                 start: Date;
                 end: Date;
-                dimension: 'year' | 'month' | 'custom';
+                dimension: "year" | "month" | "custom";
                 year: number;
                 month?: number;
                 isDateLevel: boolean;
-                originalStr: string
+                originalStr: string;
             } => {
                 if (!timeStr) {
-                    throw new Error('时间字符串不能为空');
+                    throw new Error("时间字符串不能为空");
                 }
                 if (/^\d{4}$/.test(timeStr)) {
                     const year = Number(timeStr);
                     return {
                         start: new Date(year, 0, 1, 0, 0, 0),
                         end: new Date(year, 11, 31, 23, 59, 59),
-                        dimension: 'year',
+                        dimension: "year",
                         year,
                         isDateLevel: false,
-                        originalStr: timeStr
+                        originalStr: timeStr,
                     };
                 } else if (/^\d{4}-\d{2}$/.test(timeStr)) {
-                    const [year, month] = timeStr.split('-').map(Number);
+                    const [year, month] = timeStr.split("-").map(Number);
                     return {
                         start: new Date(year, month - 1, 1, 0, 0, 0),
                         end: new Date(year, month, 0, 23, 59, 59),
-                        dimension: 'month',
+                        dimension: "month",
                         year,
                         month,
                         isDateLevel: false,
-                        originalStr: timeStr
+                        originalStr: timeStr,
                     };
                 } else if (/^\d{4}-\d{2}-\d{2}$/.test(timeStr)) {
-                    const [year, month, day] = timeStr.split('-').map(Number);
+                    const [year, month, day] = timeStr.split("-").map(Number);
                     return {
                         start: new Date(year, month - 1, day, 0, 0, 0),
                         end: new Date(year, month - 1, day, 23, 59, 59),
-                        dimension: 'custom',
+                        dimension: "custom",
                         year,
                         month,
                         isDateLevel: true,
-                        originalStr: timeStr
+                        originalStr: timeStr,
                     };
                 } else {
-                    throw new Error(`时间格式错误：${timeStr}，仅支持 YYYY、YYYY-MM、YYYY-MM-DD`);
+                    throw new Error(
+                        `时间格式错误：${timeStr}，仅支持 YYYY、YYYY-MM、YYYY-MM-DD`
+                    );
                 }
             };
 
             // 确定最终起止时间
             let finalStartTime: string = formatToFullTime(defaultStart);
             let finalEndTime: string = formatToFullTime(defaultEnd);
-            let queryDimension: 'year' | 'month' | 'custom' = 'custom';
+            let queryDimension: "year" | "month" | "custom" = "custom";
             let targetYear = now.getFullYear();
             let targetMonth = now.getMonth() + 1;
             let displayStartTime: string = formatTimeByRule(defaultStart, true);
             let displayEndTime: string = formatTimeByRule(defaultEnd, true);
-            let originalStartStr = '';
-            let originalEndStr = '';
+            let originalStartStr = "";
+            let originalEndStr = "";
 
             if (start_time) {
                 const startPeriod = getPeriodTime(start_time);
@@ -399,12 +443,12 @@ class BillModule {
                     const endPeriod = getPeriodTime(end_time);
                     originalEndStr = endPeriod.originalStr;
                     if (startPeriod.start > endPeriod.end) {
-                        throw new Error('开始时间不能晚于结束时间');
+                        throw new Error("开始时间不能晚于结束时间");
                     }
                     finalStartTime = formatToFullTime(startPeriod.start);
                     finalEndTime = formatToFullTime(endPeriod.end);
                     isDateLevelQuery = isDateLevelQuery || endPeriod.isDateLevel;
-                    queryDimension = 'custom';
+                    queryDimension = "custom";
                     displayStartTime = originalStartStr;
                     displayEndTime = originalEndStr;
                 } else {
@@ -423,87 +467,105 @@ class BillModule {
                 displayEndTime = originalEndStr;
             }
 
-            // ---------------------- 关键1：全量收支统计（新增数量统计） ----------------------
-            let fullWhereConditions: string[] = ['b.user_id = ?'];
+            // ---------------------- 关键1：全量收支统计（新增数量统计，添加 is_deleted=0） ----------------------
+            let fullWhereConditions: string[] = ["b.user_id = ?", "b.is_deleted = 0"]; // 新增
             let fullQueryParams: (string | number | null)[] = [userId];
-            fullWhereConditions.push('b.bill_time BETWEEN ? AND ?');
+            fullWhereConditions.push("b.bill_time BETWEEN ? AND ?");
             fullQueryParams.push(finalStartTime, finalEndTime);
             if (bookId !== null && bookId !== undefined && Number(bookId) > 0) {
-                fullWhereConditions.push('b.book_id = ?');
+                fullWhereConditions.push("b.book_id = ?");
                 fullQueryParams.push(Number(bookId));
             }
-            if (categoryId !== null && categoryId !== undefined && Number(categoryId) > 0) {
-                fullWhereConditions.push('b.category_id = ?');
+            if (
+                categoryId !== null &&
+                categoryId !== undefined &&
+                Number(categoryId) > 0
+            ) {
+                fullWhereConditions.push("b.category_id = ?");
                 fullQueryParams.push(Number(categoryId));
             }
 
             // 全量统计：金额 + 数量（收入笔数/支出笔数/总笔数）
             const [fullSummaryRows] = await pool.execute(
                 `SELECT IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0.00) AS fullIncomeTotal,
-                    IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0.00) AS fullExpendTotal,
-                    IFNULL(COUNT(CASE WHEN b.type = 1 THEN 1 END), 0) AS fullIncomeCount, -- 收入笔数
-                    IFNULL(COUNT(CASE WHEN b.type = 2 THEN 1 END), 0) AS fullExpendCount, -- 支出笔数
-                    IFNULL(COUNT(*), 0) AS fullTotalCount -- 总笔数
-             FROM ${this.billTableName} b
-             WHERE ${fullWhereConditions.join(' AND ')}`,
+                        IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0.00) AS fullExpendTotal,
+                        IFNULL(COUNT(CASE WHEN b.type = 1 THEN 1 END), 0) AS fullIncomeCount,
+                        IFNULL(COUNT(CASE WHEN b.type = 2 THEN 1 END), 0) AS fullExpendCount,
+                        IFNULL(COUNT(*), 0) AS fullTotalCount
+                 FROM ${this.billTableName} b
+                 WHERE ${fullWhereConditions.join(" AND ")}`,
                 fullQueryParams
             );
 
-            const totalIncome = Number((fullSummaryRows as any[])[0]?.fullIncomeTotal || 0);
-            const totalExpend = Number((fullSummaryRows as any[])[0]?.fullExpendTotal || 0);
+            const totalIncome = Number(
+                (fullSummaryRows as any[])[0]?.fullIncomeTotal || 0
+            );
+            const totalExpend = Number(
+                (fullSummaryRows as any[])[0]?.fullExpendTotal || 0
+            );
             const totalSurplus = Number((totalIncome - totalExpend).toFixed(2));
             // 新增：全量数量统计
-            const totalIncomeCount = Number((fullSummaryRows as any[])[0]?.fullIncomeCount || 0); // 总收入笔数
-            const totalExpendCount = Number((fullSummaryRows as any[])[0]?.fullExpendCount || 0); // 总支出笔数
-            const totalBillCount = Number((fullSummaryRows as any[])[0]?.fullTotalCount || 0);   // 总账单笔数
+            const totalIncomeCount = Number(
+                (fullSummaryRows as any[])[0]?.fullIncomeCount || 0
+            );
+            const totalExpendCount = Number(
+                (fullSummaryRows as any[])[0]?.fullExpendCount || 0
+            );
+            const totalBillCount = Number(
+                (fullSummaryRows as any[])[0]?.fullTotalCount || 0
+            );
 
-            // ---------------------- 关键2：列表查询（新增 categoryId 筛选） ----------------------
-            let whereConditions: string[] = ['b.user_id = ?'];
+            // ---------------------- 关键2：列表查询（新增 categoryId 筛选，添加 is_deleted=0） ----------------------
+            let whereConditions: string[] = ["b.user_id = ?", "b.is_deleted = 0"]; // 新增
             let queryParams: (string | number | null)[] = [userId];
 
-            if (type === 1) {
-                whereConditions.push('b.type = 1');
-            } else if (type === 2) {
-                whereConditions.push('b.type = 2');
+            if (type == 1) {
+                whereConditions.push("b.type = 1");
+            } else if (type == 2) {
+                whereConditions.push("b.type = 2");
             }
-            whereConditions.push('b.bill_time BETWEEN ? AND ?');
+            whereConditions.push("b.bill_time BETWEEN ? AND ?");
             queryParams.push(finalStartTime, finalEndTime);
             if (bookId !== null && bookId !== undefined && Number(bookId) > 0) {
-                whereConditions.push('b.book_id = ?');
+                whereConditions.push("b.book_id = ?");
                 queryParams.push(Number(bookId));
             }
-            if (categoryId !== null && categoryId !== undefined && Number(categoryId) > 0) {
-                whereConditions.push('b.category_id = ?');
+            if (
+                categoryId !== null &&
+                categoryId !== undefined &&
+                Number(categoryId) > 0
+            ) {
+                whereConditions.push("b.category_id = ?");
                 queryParams.push(Number(categoryId));
             }
 
             const listQueryParams = [...queryParams, offsetStr, pageSizeStr];
             const [listRows] = await pool.execute(
                 `SELECT b.id,
-                    b.user_id,
-                    b.amount,
-                    b.type,
-                    b.currency,
-                    DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s')                                  AS full_bill_time,
-                    DATE_FORMAT(b.bill_time, '%H:%i')                                              AS bill_time,
-                    DATE_FORMAT(b.bill_time, '%Y')                                                 AS bill_year,
-                    DATE_FORMAT(b.bill_time, '%m')                                                 AS bill_month,
-                    DATE_FORMAT(b.bill_time, '%d')                                                 AS bill_day,
-                    b.tags,
-                    b.remark,
-                    DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
-                    DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-                    c.name                                                                         AS category_name,
-                    c.icon                                                                         AS category_icon,
-                    c.type                                                                         AS category_type,
-                    bo.id                                                                          AS book_id,
-                    bo.name                                                                        AS book_name,
-                    bo.is_default                                                                  AS book_is_default
-             FROM ${this.billTableName} b
-                      LEFT JOIN mate_category c ON b.category_id = c.id
-                      LEFT JOIN mate_book bo ON b.book_id = bo.id
-             WHERE ${whereConditions.join(' AND ')}
-             ORDER BY b.bill_time DESC LIMIT ?, ?`,
+                        b.user_id,
+                        b.amount,
+                        b.type,
+                        b.currency,
+                        DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s')                                  AS full_bill_time,
+                        DATE_FORMAT(b.bill_time, '%H:%i')                                              AS bill_time,
+                        DATE_FORMAT(b.bill_time, '%Y')                                                 AS bill_year,
+                        DATE_FORMAT(b.bill_time, '%m')                                                 AS bill_month,
+                        DATE_FORMAT(b.bill_time, '%d')                                                 AS bill_day,
+                        b.tags,
+                        b.remark,
+                        DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
+                        DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                        c.name                                                                         AS category_name,
+                        c.icon                                                                         AS category_icon,
+                        c.type                                                                         AS category_type,
+                        bo.id                                                                          AS book_id,
+                        bo.name                                                                        AS book_name,
+                        bo.is_default                                                                  AS book_is_default
+                 FROM ${this.billTableName} b
+                          LEFT JOIN mate_category c ON b.category_id = c.id
+                          LEFT JOIN mate_book bo ON b.book_id = bo.id
+                 WHERE ${whereConditions.join(" AND ")}
+                 ORDER BY b.bill_time DESC LIMIT ?, ?`,
                 listQueryParams
             );
 
@@ -513,23 +575,23 @@ class BillModule {
             let listTotalIncome = 0;
             let listTotalExpend = 0;
             // 新增：列表数量统计
-            let currentPageIncomeCount = 0; // 当前页收入笔数
-            let currentPageExpendCount = 0; // 当前页支出笔数
-            let listTotalIncomeCount = 0;   // 列表总收入笔数
-            let listTotalExpendCount = 0;   // 列表总支出笔数
+            let currentPageIncomeCount = 0;
+            let currentPageExpendCount = 0;
+            let listTotalIncomeCount = 0;
+            let listTotalExpendCount = 0;
 
-            const rawBillList = (listRows as any[]).map(item => {
+            const rawBillList = (listRows as any[]).map((item) => {
                 const amount = Number(item.amount || 0);
                 if (item.type === 1) {
                     currentPageIncome += amount;
                     listTotalIncome += amount;
-                    currentPageIncomeCount++; // 当前页收入笔数+1
-                    listTotalIncomeCount++;   // 列表收入笔数+1
+                    currentPageIncomeCount++;
+                    listTotalIncomeCount++;
                 } else if (item.type === 2) {
                     currentPageExpend += amount;
                     listTotalExpend += amount;
-                    currentPageExpendCount++; // 当前页支出笔数+1
-                    listTotalExpendCount++;   // 列表支出笔数+1
+                    currentPageExpendCount++;
+                    listTotalExpendCount++;
                 }
 
                 return {
@@ -537,47 +599,52 @@ class BillModule {
                     user_id: item.user_id || 0,
                     amount: amount,
                     type: item.type || 0,
-                    currency: item.currency || '',
-                    full_bill_time: item.full_bill_time || '',
-                    bill_time: item.bill_time || '',
-                    remark: item.remark || '',
+                    currency: item.currency || "",
+                    full_bill_time: item.full_bill_time || "",
+                    bill_time: item.bill_time || "",
+                    remark: item.remark || "",
                     tags: (() => {
                         try {
-                            return JSON.parse(item.tags || '[]');
+                            return JSON.parse(item.tags || "[]");
                         } catch {
                             return [];
                         }
                     })(),
-                    created_at: item.created_at || '',
-                    updated_at: item.updated_at || '',
+                    created_at: item.created_at || "",
+                    updated_at: item.updated_at || "",
                     singleProgress: 0,
                     category: {
-                        name: item.category_name || '未分类',
-                        icon: item.category_icon || '',
+                        name: item.category_name || "未分类",
+                        icon: item.category_icon || "",
                         type: item.category_type || 0,
-                        id: item.category_id || 0
+                        id: item.category_id || 0,
                     },
                     book: {
                         id: item.book_id || 0,
-                        name: item.book_name || '默认账本',
-                        is_default: item.book_is_default || 0
+                        name: item.book_name || "默认账本",
+                        is_default: item.book_is_default || 0,
                     },
-                    _year: item.bill_year || '',
-                    _month: item.bill_month || '',
-                    _day: item.bill_day || ''
+                    _year: item.bill_year || "",
+                    _month: item.bill_month || "",
+                    _day: item.bill_day || "",
                 };
             });
 
-            const currentPageSurplus = Number((currentPageIncome - currentPageExpend).toFixed(2));
-            const listTotalSurplus = Number((listTotalIncome - listTotalExpend).toFixed(2));
+            const currentPageSurplus = Number(
+                (currentPageIncome - currentPageExpend).toFixed(2)
+            );
+            const listTotalSurplus = Number(
+                (listTotalIncome - listTotalExpend).toFixed(2)
+            );
             // 新增：列表/当前页数量汇总
-            const currentPageTotalCount = currentPageIncomeCount + currentPageExpendCount; // 当前页总笔数
-            const listTotalCount = listTotalIncomeCount + listTotalExpendCount;             // 列表总笔数
+            const currentPageTotalCount =
+                currentPageIncomeCount + currentPageExpendCount;
+            const listTotalCount = listTotalIncomeCount + listTotalExpendCount;
 
             // ---------------------- 核心逻辑：日期分组 + 动态基准值计算 ----------------------
             // 1. 日期分组初始化
             const dayGroupMap = new Map<string, any>();
-            rawBillList.forEach(bill => {
+            rawBillList.forEach((bill) => {
                 if (!bill._year || !bill._month || !bill._day) return;
 
                 const dayKey = `${bill._year}-${bill._month}-${bill._day}`;
@@ -586,7 +653,7 @@ class BillModule {
                         year: bill._year,
                         month: bill._month,
                         day: bill._day,
-                        weekday: '',
+                        weekday: "",
                         name: `${bill._month}月${bill._day}日`,
                         incomeMoney: 0,
                         expendMoney: 0,
@@ -595,7 +662,7 @@ class BillModule {
                         expendProgress: 0,
                         surplusProgress: 0,
                         surplusDirection: "",
-                        list: []
+                        list: [],
                     });
                 }
                 const dayGroup = dayGroupMap.get(dayKey)!;
@@ -608,30 +675,42 @@ class BillModule {
                 }
 
                 // 暂存账单（后续更新进度）
-                const {_year, _month, _day, ...pureBill} = bill;
+                const { _year, _month, _day, ...pureBill } = bill;
                 dayGroup.list.push({
                     ...pureBill,
                     amount: pureBill.amount.toFixed(2),
-                    singleProgress: 0
+                    singleProgress: 0,
                 });
             });
 
             // 2. 补全星期几
             const getWeekday = (year: string, month: string, day: string) => {
-                if (!year || !month || !day) return '';
+                if (!year || !month || !day) return "";
                 const date = new Date(Number(year), Number(month) - 1, Number(day));
-                if (isNaN(date.getTime())) return '';
-                const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                if (isNaN(date.getTime())) return "";
+                const weekdayMap = [
+                    "周日",
+                    "周一",
+                    "周二",
+                    "周三",
+                    "周四",
+                    "周五",
+                    "周六",
+                ];
                 return weekdayMap[date.getDay()];
             };
-            Array.from(dayGroupMap.values()).forEach(dayGroup => {
-                dayGroup.weekday = getWeekday(dayGroup.year, dayGroup.month, dayGroup.day);
+            Array.from(dayGroupMap.values()).forEach((dayGroup) => {
+                dayGroup.weekday = getWeekday(
+                    dayGroup.year,
+                    dayGroup.month,
+                    dayGroup.day
+                );
             });
 
             // 3. 计算全局动态基准值（收入/支出中的最大值）
             const dayGroupList = Array.from(dayGroupMap.values());
-            const allIncome = dayGroupList.map(day => day.incomeMoney);
-            const allExpend = dayGroupList.map(day => day.expendMoney);
+            const allIncome = dayGroupList.map((day) => day.incomeMoney);
+            const allExpend = dayGroupList.map((day) => day.expendMoney);
             const globalMaxIncome = Math.max(...allIncome, 0);
             const globalMaxExpend = Math.max(...allExpend, 0);
             const dynamicBaseMax = Math.max(globalMaxIncome, globalMaxExpend);
@@ -644,23 +723,37 @@ class BillModule {
             };
 
             // 5. 计算每日进度（基于动态基准值）
-            dayGroupList.forEach(dayGroup => {
-                dayGroup.incomeProgress = calculateProgress(dayGroup.incomeMoney, dynamicBaseMax);
-                dayGroup.expendProgress = calculateProgress(dayGroup.expendMoney, dynamicBaseMax);
-                dayGroup.surplusMoney = Number((dayGroup.incomeMoney - dayGroup.expendMoney).toFixed(2));
-                dayGroup.surplusDirection = dayGroup.surplusMoney >= 0 ? "盈余" : "赤字";
-                dayGroup.surplusProgress = calculateProgress(Math.abs(dayGroup.surplusMoney), dynamicBaseMax);
+            dayGroupList.forEach((dayGroup) => {
+                dayGroup.incomeProgress = calculateProgress(
+                    dayGroup.incomeMoney,
+                    dynamicBaseMax
+                );
+                dayGroup.expendProgress = calculateProgress(
+                    dayGroup.expendMoney,
+                    dynamicBaseMax
+                );
+                dayGroup.surplusMoney = Number(
+                    (dayGroup.incomeMoney - dayGroup.expendMoney).toFixed(2)
+                );
+                dayGroup.surplusDirection =
+                    dayGroup.surplusMoney >= 0 ? "盈余" : "赤字";
+                dayGroup.surplusProgress = calculateProgress(
+                    Math.abs(dayGroup.surplusMoney),
+                    dynamicBaseMax
+                );
 
                 // 单个账单进度（动态基准）
-                // @ts-ignore
-                dayGroup.list.forEach(bill => {
-                    bill.singleProgress = calculateProgress(Number(bill.amount), dynamicBaseMax);
+                dayGroup.list.forEach((bill:any) => {
+                    bill.singleProgress = calculateProgress(
+                        Number(bill.amount),
+                        dynamicBaseMax
+                    );
                 });
             });
 
             // ---------------------- 月份分组（基于动态基准值） ----------------------
             const monthGroupMap = new Map<string, any>();
-            dayGroupList.forEach(dayGroup => {
+            dayGroupList.forEach((dayGroup) => {
                 const monthKey = `${dayGroup.year}-${dayGroup.month}`;
                 if (!monthGroupMap.has(monthKey)) {
                     monthGroupMap.set(monthKey, {
@@ -674,7 +767,7 @@ class BillModule {
                         expendProgress: 0,
                         surplusProgress: 0,
                         surplusDirection: "",
-                        children: []
+                        children: [],
                     });
                 }
                 const monthGroup = monthGroupMap.get(monthKey)!;
@@ -684,71 +777,89 @@ class BillModule {
                 monthGroup.expendMoney += dayGroup.expendMoney;
 
                 // 当月进度（基于动态基准值）
-                monthGroup.incomeProgress = calculateProgress(monthGroup.incomeMoney, dynamicBaseMax);
-                monthGroup.expendProgress = calculateProgress(monthGroup.expendMoney, dynamicBaseMax);
+                monthGroup.incomeProgress = calculateProgress(
+                    monthGroup.incomeMoney,
+                    dynamicBaseMax
+                );
+                monthGroup.expendProgress = calculateProgress(
+                    monthGroup.expendMoney,
+                    dynamicBaseMax
+                );
                 // 当月盈余
-                monthGroup.surplusMoney = Number((monthGroup.incomeMoney - monthGroup.expendMoney).toFixed(2));
-                monthGroup.surplusDirection = monthGroup.surplusMoney >= 0 ? "盈余" : "赤字";
-                monthGroup.surplusProgress = calculateProgress(Math.abs(monthGroup.surplusMoney), dynamicBaseMax);
+                monthGroup.surplusMoney = Number(
+                    (monthGroup.incomeMoney - monthGroup.expendMoney).toFixed(2)
+                );
+                monthGroup.surplusDirection =
+                    monthGroup.surplusMoney >= 0 ? "盈余" : "赤字";
+                monthGroup.surplusProgress = calculateProgress(
+                    Math.abs(monthGroup.surplusMoney),
+                    dynamicBaseMax
+                );
 
                 // 加入日期分组
                 monthGroup.children.push(dayGroup);
             });
 
             // ---------------------- 空数据兜底 & 金额格式化 ----------------------
-            const monthList = Array.from(monthGroupMap.values()).map(monthGroup => ({
-                ...monthGroup,
-                incomeMoney: monthGroup.incomeMoney.toFixed(2),
-                expendMoney: monthGroup.expendMoney.toFixed(2),
-                surplusMoney: monthGroup.surplusMoney.toFixed(2),
-                incomeProgress: monthGroup.incomeProgress,
-                expendProgress: monthGroup.expendProgress,
-                surplusProgress: monthGroup.surplusProgress,
-                // 格式化日期分组
-                children: monthGroup.children.map((dayGroup: any) => ({
-                    ...dayGroup,
-                    incomeMoney: dayGroup.incomeMoney.toFixed(2),
-                    expendMoney: dayGroup.expendMoney.toFixed(2),
-                    surplusMoney: dayGroup.surplusMoney.toFixed(2),
-                    incomeProgress: dayGroup.incomeProgress,
-                    expendProgress: dayGroup.expendProgress,
-                    surplusProgress: dayGroup.surplusProgress,
-                    list: dayGroup.list.map((bill: any) => ({
-                        ...bill,
-                        amount: bill.amount,
-                        singleProgress: bill.singleProgress,
-                        status:true
-                    }))
-                })).sort((a: any, b: any) => Number(b.day) - Number(a.day))
-            })).sort((a, b) => {
-                if (a.year !== b.year) return Number(b.year) - Number(a.year);
-                return Number(b.month) - Number(a.month);
-            });
+            const monthList = Array.from(monthGroupMap.values())
+                .map((monthGroup) => ({
+                    ...monthGroup,
+                    incomeMoney: monthGroup.incomeMoney.toFixed(2),
+                    expendMoney: monthGroup.expendMoney.toFixed(2),
+                    surplusMoney: monthGroup.surplusMoney.toFixed(2),
+                    incomeProgress: monthGroup.incomeProgress,
+                    expendProgress: monthGroup.expendProgress,
+                    surplusProgress: monthGroup.surplusProgress,
+                    // 格式化日期分组
+                    children: monthGroup.children
+                        .map((dayGroup: any) => ({
+                            ...dayGroup,
+                            incomeMoney: dayGroup.incomeMoney.toFixed(2),
+                            expendMoney: dayGroup.expendMoney.toFixed(2),
+                            surplusMoney: dayGroup.surplusMoney.toFixed(2),
+                            incomeProgress: dayGroup.incomeProgress,
+                            expendProgress: dayGroup.expendProgress,
+                            surplusProgress: dayGroup.surplusProgress,
+                            list: dayGroup.list.map((bill: any) => ({
+                                ...bill,
+                                amount: bill.amount,
+                                singleProgress: bill.singleProgress,
+                                status: true,
+                            })),
+                        }))
+                        .sort((a: any, b: any) => Number(b.day) - Number(a.day)),
+                }))
+                .sort((a, b) => {
+                    if (a.year !== b.year) return Number(b.year) - Number(a.year);
+                    return Number(b.month) - Number(a.month);
+                });
 
             if (monthList.length === 0) {
                 const startDate = new Date(finalStartTime);
             }
 
             const formattedList = {
-                ...(queryDimension === 'custom' ? {
-                    timeRange: {
-                        start: displayStartTime,
-                        end: displayEndTime
+                ...(queryDimension === "custom"
+                    ? {
+                        timeRange: {
+                            start: displayStartTime,
+                            end: displayEndTime,
+                        },
                     }
-                } : {
-                    year: targetYear,
-                    ...(queryDimension === 'month' ? {month: targetMonth} : {})
-                }),
-                listType: 'month',
-                dataList: monthList
+                    : {
+                        year: targetYear,
+                        ...(queryDimension === "month" ? { month: targetMonth } : {}),
+                    }),
+                listType: "month",
+                dataList: monthList,
             };
 
-            // ---------------------- 总条数查询 ----------------------
+            // ---------------------- 总条数查询（添加 is_deleted=0） ----------------------
             let total = 0;
             const [countRows] = await pool.execute(
                 `SELECT COUNT(*) AS total
-             FROM ${this.billTableName} b
-             WHERE ${whereConditions.join(' AND ')}`,
+                 FROM ${this.billTableName} b
+                 WHERE ${whereConditions.join(" AND ")}`,
                 queryParams
             );
             total = Number((countRows as any[])[0]?.total || 0);
@@ -757,8 +868,14 @@ class BillModule {
             // ---------------------- 全局进度计算 ----------------------
             const incomeProgress = calculateProgress(listTotalIncome, dynamicBaseMax);
             const expendProgress = calculateProgress(listTotalExpend, dynamicBaseMax);
-            const surplusProgress = calculateProgress(Math.abs(listTotalSurplus), dynamicBaseMax);
-            const currentPageSurplusProgress = calculateProgress(Math.abs(currentPageSurplus), dynamicBaseMax);
+            const surplusProgress = calculateProgress(
+                Math.abs(listTotalSurplus),
+                dynamicBaseMax
+            );
+            const currentPageSurplusProgress = calculateProgress(
+                Math.abs(currentPageSurplus),
+                dynamicBaseMax
+            );
 
             // ---------------------- 返回结果（新增数量字段） ----------------------
             return {
@@ -766,25 +883,25 @@ class BillModule {
                 list: formattedList,
                 summary: {
                     // 金额维度（原有）
-                    totalIncome: formatAmount(totalIncome),         // 全量总收入
-                    totalExpend: formatAmount(totalExpend),         // 全量总支出
-                    totalSurplus: formatAmount(totalSurplus),       // 全量总盈余
-                    listIncome: formatAmount(listTotalIncome),      // 列表总收入
-                    listExpend: formatAmount(listTotalExpend),      // 列表总支出
-                    listSurplus: formatAmount(listTotalSurplus),    // 列表总盈余
-                    currentPageIncome: currentPageIncome.toFixed(2),// 当前页收入
-                    currentPageExpend: currentPageExpend.toFixed(2),// 当前页支出
-                    currentPageSurplus: currentPageSurplus.toString(),// 当前页盈余
+                    totalIncome: formatAmount(totalIncome),
+                    totalExpend: formatAmount(totalExpend),
+                    totalSurplus: formatAmount(totalSurplus),
+                    listIncome: formatAmount(listTotalIncome),
+                    listExpend: formatAmount(listTotalExpend),
+                    listSurplus: formatAmount(listTotalSurplus),
+                    currentPageIncome: currentPageIncome.toFixed(2),
+                    currentPageExpend: currentPageExpend.toFixed(2),
+                    currentPageSurplus: currentPageSurplus.toString(),
                     // 数量维度（新增）
-                    totalIncomeCount: totalIncomeCount,             // 全量收入笔数
-                    totalExpendCount: totalExpendCount,             // 全量支出笔数
-                    totalBillCount: totalBillCount,                 // 全量总笔数
-                    listIncomeCount: listTotalIncomeCount,          // 列表收入笔数
-                    listExpendCount: listTotalExpendCount,          // 列表支出笔数
-                    listTotalCount: listTotalCount,                 // 列表总笔数
-                    currentPageIncomeCount: currentPageIncomeCount, // 当前页收入笔数
-                    currentPageExpendCount: currentPageExpendCount, // 当前页支出笔数
-                    currentPageTotalCount: currentPageTotalCount,   // 当前页总笔数
+                    totalIncomeCount: totalIncomeCount,
+                    totalExpendCount: totalExpendCount,
+                    totalBillCount: totalBillCount,
+                    listIncomeCount: listTotalIncomeCount,
+                    listExpendCount: listTotalExpendCount,
+                    listTotalCount: listTotalCount,
+                    currentPageIncomeCount: currentPageIncomeCount,
+                    currentPageExpendCount: currentPageExpendCount,
+                    currentPageTotalCount: currentPageTotalCount,
                     // 其他原有字段
                     year: null,
                     month: null,
@@ -800,29 +917,29 @@ class BillModule {
                     surplusProgress: surplusProgress,
                     start_time: displayStartTime,
                     end_time: displayEndTime,
-                    progressDesc: `进度基准：${dynamicBaseMax === globalMaxIncome ? '收入' : '支出'}最大值(${dynamicBaseMax.toFixed(2)})=100%`,
-                    filterType: type === undefined || type === null ? 'all' : type,
-                    filterCategoryId: categoryId || 'all',
-                    emptyTip: total === 0 ? '当前筛选条件下无账单数据' : ''
+                    progressDesc: `进度基准：${dynamicBaseMax === globalMaxIncome ? "收入" : "支出"}最大值(${dynamicBaseMax.toFixed(2)})=100%`,
+                    filterType: type === undefined || type === null ? "all" : type,
+                    filterCategoryId: categoryId || "all",
+                    emptyTip: total === 0 ? "当前筛选条件下无账单数据" : "",
                 },
                 pagination: {
                     total,
                     page: validPage,
                     pageSize: validPageSize,
-                    totalPage
-                }
+                    totalPage,
+                },
             };
         } catch (error: any) {
-            console.error('查询账单列表失败：', error.message, error.stack);
+            console.error("查询账单列表失败：", error.message, error.stack);
 
             const now = new Date();
             const defaultYear = now.getFullYear();
             const defaultMonth = now.getMonth() + 1;
             const formatTimeByRule = (date: Date, isDateLevel: boolean): string => {
                 const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, "0");
                 if (isDateLevel) {
-                    const day = String(date.getDate()).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, "0");
                     return `${year}-${month}-${day}`;
                 }
                 return `${year}-${month}`;
@@ -833,7 +950,7 @@ class BillModule {
             // 异常场景：数量字段兜底为0
             return {
                 code: 500,
-                message: error.message || '查询账单失败',
+                message: error.message || "查询账单失败",
                 list: {},
                 summary: {
                     // 金额维度兜底
@@ -863,7 +980,7 @@ class BillModule {
                     start_month: defaultMonth,
                     end_year: defaultYear,
                     end_month: defaultMonth,
-                    queryDimension: 'custom',
+                    queryDimension: "custom",
                     surplusDirection: "盈余",
                     currentPageSurplusProgress: 0,
                     incomeProgress: 0,
@@ -872,16 +989,16 @@ class BillModule {
                     start_time: displayStartTime,
                     end_time: displayEndTime,
                     progressDesc: "",
-                    filterType: type === undefined || type === null ? 'all' : type,
-                    filterCategoryId: categoryId || 'all',
-                    emptyTip: '查询异常，暂无数据'
+                    filterType: type === undefined || type === null ? "all" : type,
+                    filterCategoryId: categoryId || "all",
+                    emptyTip: "查询异常，暂无数据",
                 },
                 pagination: {
                     total: 0,
                     page: Math.max(Number(page) || 1, 1),
                     pageSize: Math.max(Number(pageSize) || 10, 1),
-                    totalPage: 0
-                }
+                    totalPage: 0,
+                },
             };
         }
     }
@@ -890,7 +1007,10 @@ class BillModule {
      * @param userId 用户ID
      * @param billId 账单ID
      */
-    async removeBill(userId: number, billId: number): Promise<{
+    async removeBill(
+        userId: number,
+        billId: number
+    ): Promise<{
         code: number;
         message: string;
         data?: Record<string, any>;
@@ -899,8 +1019,18 @@ class BillModule {
         const realBillId = Number(billId);
         let totalBookExpense = 0;
 
-        if (isNaN(realUserId) || realUserId <= 0 || isNaN(realBillId) || realBillId <= 0) {
-            console.error("删除账单失败：参数非法", { userId, billId, realUserId, realBillId });
+        if (
+            isNaN(realUserId) ||
+            realUserId <= 0 ||
+            isNaN(realBillId) ||
+            realBillId <= 0
+        ) {
+            console.error("删除账单失败：参数非法", {
+                userId,
+                billId,
+                realUserId,
+                realBillId,
+            });
             return { code: 400, message: "参数错误：用户ID和账单ID必须为正整数" };
         }
 
@@ -908,10 +1038,11 @@ class BillModule {
         try {
             connection = await pool.getConnection();
             await connection.beginTransaction();
-            // 修复日志格式，清晰展示参数
-            console.log(`开始删除账单事务 → 账单ID: ${realBillId}，用户ID: ${realUserId}`);
+            console.log(
+                `开始删除账单事务 → 账单ID: ${realBillId}，用户ID: ${realUserId}`
+            );
 
-            // 步骤1：查询账单完整信息（含主预算关联，不依赖分类预算）
+            // 步骤1：查询账单完整信息（添加 is_deleted=0）
             const [billRows] = await connection.execute(
                 `SELECT b.id                       AS bill_id,
                         b.user_id                  AS bill_user_id,
@@ -920,12 +1051,10 @@ class BillModule {
                         b.amount                   AS bill_amount,
                         b.type                     AS bill_type,
                         b.bill_time,
-                        -- 关联分类预算
                         mbc.id                     AS category_budget_id,
                         mbc.budget_id              AS related_budget_id,
                         mbc.category_amount        AS category_total_budget,
                         mbc.category_actual_amount AS category_current_actual,
-                        -- 直接关联主预算（即使无分类预算，也能拿到账本对应的主预算）
                         mb.id                      AS main_budget_id,
                         mb.amount                  AS main_total_budget,
                         mb.actual_amount           AS main_current_actual,
@@ -937,7 +1066,6 @@ class BillModule {
                                     ON b.user_id = mbc.user_id
                                         AND b.book_id = mbc.book_id
                                         AND b.category_id = mbc.category_id
-                     -- 新增：直接按用户+账本匹配主预算（不依赖分类预算）
                           LEFT JOIN mate_budget mb
                                     ON b.user_id = mb.user_id
                                         AND b.book_id = mb.book_id
@@ -947,47 +1075,49 @@ class BillModule {
                     OR (b.id = ?
                    AND b.user_id = ?)
                    AND b.type = 2
+                   AND b.is_deleted = 0  -- 新增：仅查询未删除的账单
                      LIMIT 1`,
                 [realBillId, realUserId, realUserId, realBillId]
             );
 
             const bill = (billRows as any[])[0];
             if (!bill) {
-                // 处理非支出账单逻辑
+                // 处理非支出账单逻辑（添加 is_deleted=0）
                 const [otherBillRows] = await connection.execute(
                     `SELECT id, type
                      FROM mate_bill
                      WHERE (id = ? AND user_id = ?)
                         OR (id = ? AND user_id = ?)
-                         AND type
-                         != 2 LIMIT 1`,
+                         AND type != 2
+                         AND is_deleted = 0  -- 新增
+                         LIMIT 1`,
                     [realBillId, realUserId, realUserId, realBillId]
                 );
                 if ((otherBillRows as any[]).length > 0) {
+                    // 逻辑删除非支出账单（替代物理删除）
                     const [deleteRes] = await connection.execute(
-                        `DELETE
-                         FROM mate_bill
+                        `UPDATE mate_bill
+                         SET is_deleted = 1, updated_at = NOW()
                          WHERE (id = ? AND user_id = ?)
                             OR (id = ? AND user_id = ?)
-                             AND type
-                             != 2`,
+                             AND type != 2`,
                         [realBillId, realUserId, realUserId, realBillId]
                     );
                     await connection.commit();
                     return {
                         code: 200,
                         message: `非支出账单删除成功（type=${(otherBillRows as any[])[0].type}，不影响预算）`,
-                        data: { affectedRows: (deleteRes as any).affectedRows }
+                        data: { affectedRows: (deleteRes as any).affectedRows },
                     };
                 }
                 await connection.rollback();
                 return { code: 404, message: "支出账单不存在或不属于当前用户" };
             }
 
-            // 步骤2：删除支出账单
+            // 步骤2：逻辑删除支出账单（替代物理删除）
             const [deleteRes] = await connection.execute(
-                `DELETE
-                 FROM mate_bill
+                `UPDATE mate_bill
+                 SET is_deleted = 1, updated_at = NOW()
                  WHERE (id = ? AND user_id = ?)
                     OR (id = ? AND user_id = ?)
                      AND type = 2`,
@@ -998,7 +1128,7 @@ class BillModule {
                 await connection.rollback();
                 return { code: 500, message: "支出账单删除失败（数据未变更）" };
             }
-            console.log("账单删除成功，金额：", bill.bill_amount);
+            console.log("账单逻辑删除成功，金额：", bill.bill_amount);
 
             // 步骤3：统一处理预算更新（覆盖有/无分类预算场景）
             let budgetUpdateResult = { categoryUpdated: false, mainUpdated: false };
@@ -1010,93 +1140,120 @@ class BillModule {
                 related_budget_id: mainBudgetId,
                 category_current_actual,
                 main_current_actual,
-                main_total_budget, // 主预算总金额
+                main_total_budget,
                 cycle_start,
-                cycle_end
+                cycle_end,
             } = bill;
 
             // 3.1 处理分类预算退回（有分类预算时）
             if (category_budget_id) {
-                const newCategoryActual = Math.max(0, Number(category_current_actual) - Number(deleted_amount));
-                // 计算剩余百分比：(总预算 - 实际支出) / 总预算 * 100，保留2位小数（允许负数）
+                const newCategoryActual = Math.max(
+                    0,
+                    Number(category_current_actual) - Number(deleted_amount)
+                );
                 const categoryTotalBudget = Number(bill.category_total_budget) || 0;
                 let remainingPercent = 0;
                 if (categoryTotalBudget > 0) {
-                    // 核心修正：移除0-100的限制，保留真实百分比（支持负数）
-                    remainingPercent = Number(((categoryTotalBudget - newCategoryActual) / categoryTotalBudget * 100).toFixed(2));
+                    remainingPercent = Number(
+                        (
+                            ((categoryTotalBudget - newCategoryActual) /
+                                categoryTotalBudget) *
+                            100
+                        ).toFixed(2)
+                    );
                 }
 
                 await connection.execute(
                     `UPDATE mate_budget_category mbc
-                 SET mbc.category_actual_amount = ?,
-                     mbc.remaining_percent      = ?, -- 新增：更新剩余百分比（支持负数）
-                     mbc.updated_at             = NOW()
-                 WHERE mbc.id = ?`,
+                     SET mbc.category_actual_amount = ?,
+                         mbc.remaining_percent      = ?,
+                         mbc.updated_at             = NOW()
+                     WHERE mbc.id = ?`,
                     [newCategoryActual, remainingPercent, category_budget_id]
                 );
-                console.log("分类预算退回：", deleted_amount, "更新后实际支出：", newCategoryActual, "剩余百分比：", remainingPercent + "%");
+                console.log(
+                    "分类预算退回：",
+                    deleted_amount,
+                    "更新后实际支出：",
+                    newCategoryActual,
+                    "剩余百分比：",
+                    remainingPercent + "%"
+                );
                 budgetUpdateResult.categoryUpdated = true;
             }
 
             // 3.2 处理主预算更新（核心修复：无论是否有分类预算，都更新主预算）
-            // 优先用账单关联的主预算ID，无则按用户+账本重新查询
             const targetMainBudgetId = mainBudgetId || bill.main_budget_id;
             if (targetMainBudgetId) {
-                // 重新统计账本总支出（精准）
+                // 重新统计账本总支出（添加 is_deleted=0）
                 const [totalExpenseRows] = await connection.execute(
                     `SELECT IFNULL(CAST(SUM(b.amount) AS DECIMAL(16, 2)), 0.00) AS total_book_expense
                      FROM mate_bill b
                      WHERE b.user_id = ?
                        AND b.book_id = ?
                        AND b.type = 2
-                       AND (b.is_deleted IS NULL OR b.is_deleted = 0)
+                       AND b.is_deleted = 0  -- 新增：仅统计未删除的账单
                        AND b.amount > 0
-                   -- 限定预算周期（避免统计跨周期账单）
-                       AND DATE (b.bill_time) BETWEEN ?
-                       AND ?`,
-                    [realUserId, book_id, cycle_start || '1970-01-01', cycle_end || '9999-12-31']
+                       AND DATE (b.bill_time) BETWEEN ? AND ?`,
+                    [
+                        realUserId,
+                        book_id,
+                        cycle_start || "1970-01-01",
+                        cycle_end || "9999-12-31",
+                    ]
                 );
 
-                totalBookExpense = Number((totalExpenseRows as any[])[0]?.total_book_expense || 0.00);
+                totalBookExpense = Number(
+                    (totalExpenseRows as any[])[0]?.total_book_expense || 0.0
+                );
                 console.log("重新统计的账本总支出：", totalBookExpense);
 
-                // 计算主预算剩余百分比（和分类预算逻辑一致）
+                // 计算主预算剩余百分比
                 const mainTotalBudget = Number(main_total_budget) || 0;
                 let mainRemainingPercent = 0;
                 if (mainTotalBudget > 0) {
-                    // 剩余百分比 = (总预算 - 实际支出) / 总预算 * 100，保留2位小数（支持负数）
-                    mainRemainingPercent = Number(((mainTotalBudget - totalBookExpense) / mainTotalBudget * 100).toFixed(2));
+                    mainRemainingPercent = Number(
+                        (
+                            ((mainTotalBudget - totalBookExpense) / mainTotalBudget) *
+                            100
+                        ).toFixed(2)
+                    );
                 }
 
-                // 更新主预算（包含remaining_percent）
+                // 更新主预算
                 await connection.execute(
                     `UPDATE mate_budget mb
-                 SET mb.actual_amount = ?,
-                     mb.remaining_percent = ?,
-                     mb.updated_at    = NOW()
-                 WHERE mb.id = ?`,
+                     SET mb.actual_amount = ?,
+                         mb.remaining_percent = ?,
+                         mb.updated_at    = NOW()
+                     WHERE mb.id = ?`,
                     [totalBookExpense, mainRemainingPercent, targetMainBudgetId]
                 );
 
                 console.log("主预算更新：", {
                     mainTotalBudget,
                     newActualAmount: totalBookExpense,
-                    remainingPercent: mainRemainingPercent + "%"
+                    remainingPercent: mainRemainingPercent + "%",
                 });
                 budgetUpdateResult.mainUpdated = true;
             } else {
-                // 兜底：无主预算ID时，按用户+账本查询并创建/更新主预算（可选）
-                console.warn("未匹配到主预算，跳过主预算更新", { userId: realUserId, bookId: book_id });
+                console.warn("未匹配到主预算，跳过主预算更新", {
+                    userId: realUserId,
+                    bookId: book_id,
+                });
             }
 
             // 步骤4：提交事务
-            await connection.commit()
+            await connection.commit();
 
             // 步骤5：返回精准提示
             return {
                 code: 200,
                 message: (() => {
-                    if (budgetUpdateResult.categoryUpdated && budgetUpdateResult.mainUpdated) {
+                    if (
+                        budgetUpdateResult.categoryUpdated &&
+                        budgetUpdateResult.mainUpdated
+                    ) {
                         return `支出账单删除成功，已退回分类预算金额¥${deleted_amount}，总预算已重新计算`;
                     } else if (budgetUpdateResult.mainUpdated) {
                         return `支出账单删除成功，总预算已重新计算（无分类预算）`;
@@ -1110,39 +1267,60 @@ class BillModule {
                     affectedRows: deleteAffectedRows,
                     budgetUpdate: budgetUpdateResult,
                     refundAmount: deleted_amount,
-                    newCategoryActual: category_budget_id ? Math.max(0, Number(category_current_actual) - Number(deleted_amount)) : 0,
+                    newCategoryActual: category_budget_id
+                        ? Math.max(
+                            0,
+                            Number(category_current_actual) - Number(deleted_amount)
+                        )
+                        : 0,
                     newMainActual: totalBookExpense,
-                    mainRemainingPercent: targetMainBudgetId ? Number(((Number(main_total_budget) - totalBookExpense) / (Number(main_total_budget) || 1) * 100).toFixed(2)) : 0
-                }
+                    mainRemainingPercent: targetMainBudgetId
+                        ? Number(
+                            (
+                                ((Number(main_total_budget) - totalBookExpense) /
+                                    (Number(main_total_budget) || 1)) *
+                                100
+                            ).toFixed(2)
+                        )
+                        : 0,
+                },
             };
-
         } catch (error) {
             if (connection) await connection.rollback();
             console.error("删除账单事务异常", {
                 billId: realBillId,
                 userId: realUserId,
                 error: (error as Error).message,
-                stack: (error as Error).stack
+                stack: (error as Error).stack,
             });
-            return { code: 500, message: `删除账单失败：${(error as Error).message || "服务器内部错误"}` };
+            return {
+                code: 500,
+                message: `删除账单失败：${(error as Error).message || "服务器内部错误"}`,
+            };
         } finally {
             if (connection) connection.release();
         }
     }
 
     /**
-     * 查询单条账单详情
+     * 查询单条账单详情（添加 is_deleted=0）
      * @param userId 用户ID（校验账单归属，防止越权）
      * @param billId 账单ID
      * @returns 账单详情数据
      */
     async billInfo(userId: number, billId: number): Promise<any> {
         try {
-
-
             const getWeekday = (year: string, month: string, day: string) => {
                 const date = new Date(Number(year), Number(month) - 1, Number(day));
-                const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                const weekdayMap = [
+                    "周日",
+                    "周一",
+                    "周二",
+                    "周三",
+                    "周四",
+                    "周五",
+                    "周六",
+                ];
                 return weekdayMap[date.getDay()];
             };
 
@@ -1152,39 +1330,37 @@ class BillModule {
             if (isNaN(validUserId) || validUserId <= 0) {
                 return {
                     code: 400,
-                    msg: '用户ID无效',
-                    data: null
+                    msg: "用户ID无效",
+                    data: null,
                 };
             }
             if (isNaN(validBillId) || validBillId <= 0) {
                 return {
                     code: 400,
-                    msg: '账单ID无效',
-                    data: null
+                    msg: "账单ID无效",
+                    data: null,
                 };
             }
 
-            // 3. 查询账单详情（关联分类、账本表，校验用户归属）
+            // 3. 查询账单详情（添加 is_deleted=0）
             const [billRows] = await pool.execute(
                 `SELECT b.id,
                         b.user_id,
                         b.amount,
-                        b.type,   -- 1=收入，2=支出
+                        b.type,
                         b.currency,
                         DATE_FORMAT(CONVERT_TZ(b.bill_time, '+00:00', '+08:00'), '%Y-%m-%d %H:%i')     AS bill_time,
                         DATE_FORMAT(CONVERT_TZ(b.bill_time, '+00:00', '+08:00'), '%Y')                 AS bill_year,
                         DATE_FORMAT(CONVERT_TZ(b.bill_time, '+00:00', '+08:00'), '%m')                 AS bill_month,
                         DATE_FORMAT(CONVERT_TZ(b.bill_time, '+00:00', '+08:00'), '%d')                 AS bill_day,
-                        b.tags,   -- 标签（JSON字符串）
-                        b.remark, -- 备注（可选）
+                        b.tags,
+                        b.remark,
                         DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
                         DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-                        -- 分类信息
                         c.id                                                                           AS category_id,
                         c.name                                                                         AS category_name,
                         c.icon                                                                         AS category_icon,
                         c.type                                                                         AS category_type,
-                        -- 账本信息
                         bo.id                                                                          AS book_id,
                         bo.name                                                                        AS book_name,
                         bo.is_default                                                                  AS book_is_default
@@ -1192,17 +1368,18 @@ class BillModule {
                           LEFT JOIN mate_category c ON b.category_id = c.id
                           LEFT JOIN mate_book bo ON b.book_id = bo.id
                  WHERE b.id = ?
-                   AND b.user_id = ?`,
+                   AND b.user_id = ?
+                   AND b.is_deleted = 0  -- 新增：仅查询未删除的账单`,
                 [validBillId, validUserId]
             );
 
-            // 4. 校验账单是否存在（且归属当前用户）
+            // 4. 校验账单是否存在
             const billItem = (billRows as any[])[0];
             if (!billItem) {
                 return {
                     code: 404,
-                    msg: '账单不存在或无访问权限',
-                    data: null
+                    msg: "账单不存在或无访问权限",
+                    data: null,
                 };
             }
 
@@ -1210,58 +1387,55 @@ class BillModule {
             const formattedBill = {
                 id: billItem.id,
                 user_id: billItem.user_id,
-                amount: formatAmount(billItem.amount), // 金额（保留两位小数，字符串）
-                amountNumber: formatAmount(billItem.amount, 'number'), // 金额（数字类型，便于计算）
+                amount: formatAmount(billItem.amount),
+                amountNumber: formatAmount(billItem.amount, "number"),
                 type: billItem.type,
-                typeText: billItem.type === 1 ? '收入' : '支出', // 类型文本
-                currency: billItem.currency || 'CNY', // 币种，默认人民币
+                typeText: billItem.type === 1 ? "收入" : "支出",
+                currency: billItem.currency || "CNY",
                 bill_time: billItem.bill_time,
-                // 日期维度
                 dateInfo: {
                     year: billItem.bill_year,
                     month: billItem.bill_month,
                     day: billItem.bill_day,
-                    weekday: getWeekday(billItem.bill_year, billItem.bill_month, billItem.bill_day) // 星期
+                    weekday: getWeekday(
+                        billItem.bill_year,
+                        billItem.bill_month,
+                        billItem.bill_day
+                    ),
                 },
-                tags: parseJsonToArray(billItem.tags), // 解析标签数组
-                remark: billItem.remark || '', // 备注（空值处理）
+                tags: parseJsonToArray(billItem.tags),
+                remark: billItem.remark || "",
                 created_at: billItem.created_at,
                 updated_at: billItem.updated_at,
-                // 分类信息
                 category: {
                     id: billItem.category_id || 0,
-                    name: billItem.category_name || '未分类',
-                    icon: billItem.category_icon || '',
-                    type: billItem.category_type || billItem.type // 分类类型默认和账单类型一致
+                    name: billItem.category_name || "未分类",
+                    icon: billItem.category_icon || "",
+                    type: billItem.category_type || billItem.type,
                 },
-                // 账本信息
                 book: {
                     id: billItem.book_id || 0,
-                    name: billItem.book_name || '默认账本',
-                    is_default: billItem.book_is_default || 0
-                }
+                    name: billItem.book_name || "默认账本",
+                    is_default: billItem.book_is_default || 0,
+                },
             };
 
             // 6. 返回成功结果
             return {
                 code: 200,
-                msg: '查询成功',
-                data: formattedBill
+                msg: "查询成功",
+                data: formattedBill,
             };
         } catch (error: any) {
-            console.error('查询账单详情失败：', error.message, error.stack);
-            // 7. 异常处理
+            console.error("查询账单详情失败：", error.message, error.stack);
             return {
                 code: 500,
-                msg: '服务器内部错误',
+                msg: "服务器内部错误",
                 data: null,
-                error: process.env.NODE_ENV === 'development' ? error.message : '' // 开发环境返回错误详情
+                error: process.env.NODE_ENV === "development" ? error.message : "",
             };
         }
     }
-
-
 }
 
 export default new BillModule();
-

@@ -1,22 +1,20 @@
 // @ts-ignore
-import userModel from "../../modules/miniProgram/UserModule"
+import userModel from "../../modules/miniProgram/UserModule";
 
 export const userInfoService = (req: Request, res: Response) => {
-    // @ts-ignore
-    const {userId} = req.body;
-    return userModel.info(userId)
-}
-
-
+  // @ts-ignore
+  const { userId } = req.body;
+  return userModel.info(userId);
+};
 
 export const userQrcodeService = (req: Request, res: Response) => {
-    // @ts-ignore
-    const {userId,config} = req.body;
-    return userModel.generateUserQRCodeById(userId,config)
-}
+  // @ts-ignore
+  const { userId, config } = req.body;
+  return userModel.generateUserQRCodeById(userId, config);
+};
 export const userUpdateService = (req: Request, res: Response) => {
-    // @ts-ignore
-    let {userId, userInfo,updateType} = req.body;
-    console.log(userId);
-    return userModel.updateUser(userId, userInfo,updateType)
-}
+  // @ts-ignore
+  let { userId, userInfo, updateType } = req.body;
+  console.log(userId);
+  return userModel.updateUser(userId, userInfo, updateType);
+};
