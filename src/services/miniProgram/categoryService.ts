@@ -73,3 +73,21 @@ export const removeListCategoryService = async (req: Request, res: Response) => 
   let result = await categoryModule.removeCategoryDelete(categoryDeleteId,currentUserId,categoryId);
   return result;
 };
+
+
+export const categoryBillListService = async (req: Request, res: Response) => {
+    try {
+        const { userId,page, pageSize,start_time, end_time,bookId,type,categoryId} = req.body;
+        return await categoryModule.categoryBillList(
+            userId,page, pageSize,start_time, end_time,bookId,type,categoryId
+        );
+    } catch (err) {
+        // @ts-ignore
+        res.status(err.status).json({
+            // @ts-ignore
+            code: err.status,
+            // @ts-ignore
+            message: err.message,
+        });
+    }
+};

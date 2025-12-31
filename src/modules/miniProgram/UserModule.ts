@@ -514,7 +514,7 @@ class UserModule {
         [userId]
       );
       const totalBillCount = (billCountRows as any[])[0].total_count || 0;
-
+    console.log(totalBillCount,';')
       // 计算注册天数
       const registerTime = user.created_at;
       const currentTime = new Date();

@@ -5,7 +5,7 @@ import type {BudgetDbSchema, UserDbSchema} from "../../types";
 import CategoryModule from "./CategoryModule";
 // @ts-ignore
 import {getWeekOfYear} from "../../utils/dateUtils";
-
+import  {formatDate} from '../../utils/date'
 type CycleType = "day" | "week" | "month" | "year" | "custom";
 
 class BillModule {
@@ -135,26 +135,55 @@ class BillModule {
             throw new HttpError("日期错误：开始日期不能晚于结束日期", 400);
         }
 
-        // 查询支出总金额
-        const [rows] = await pool.execute(
-            `SELECT IFNULL(SUM(amount), 0) AS total_expense
+        // 强制转换参数类型，避免数字/字符串不匹配
+        const userId = Number(user_id);
+        const bookId = Number(book_id);
+
+        try {
+            // 查询支出总金额（核心修复：日期范围逻辑 + 金额类型强转 + 参数化type/is_deleted）
+            const [rows] = await pool.execute(
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
              FROM ${this.billTableName}
              WHERE user_id = ?
                AND book_id = ?
-               AND type = 2 -- 仅计算支出类
-               AND is_deleted = 0 -- 未删除
-               AND bill_time BETWEEN ? AND ?`,
-            [user_id, book_id, cycle_start, cycle_end]
-        );
+               AND type = ? -- 参数化，避免类型不匹配
+               AND is_deleted = ? -- 参数化，避免类型不匹配
+               -- 修复：替换 BETWEEN，用 >= + < 结束日+1天，覆盖结束日全天数据
+               AND bill_time >= ?  
+               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                [
+                    userId,
+                    bookId,
+                    2, // 支出类型（如果数据库存字符串则改为 '2'）
+                    0, // 未删除（如果数据库存字符串则改为 '0'）
+                    cycle_start,
+                    cycle_end
+                ]
+            );
 
-        // 安全处理数值
-        const resultRows = rows as Array<{ total_expense: number | string }>;
-        const rawTotal = resultRows[0]?.total_expense ?? 0;
-        const totalExpense = Number(rawTotal);
-        const fixedTotal = Math.round(totalExpense * 100) / 100; // 保留2位小数
-        return fixedTotal;
+            // 安全处理数值
+            const resultRows = rows as Array<{ total_expense: number | string }>;
+            const rawTotal = resultRows[0]?.total_expense ?? 0;
+            const totalExpense = Number(rawTotal);
+            const fixedTotal = Math.round(totalExpense * 100) / 100; // 保留2位小数
+
+            // 可选：调试日志，便于排查问题
+            // console.log("【总支出计算】", {
+            //     参数: { userId, bookId, cycle_start, cycle_end },
+            //     原始金额: rawTotal,
+            //     格式化后: fixedTotal
+            // });
+
+            return fixedTotal;
+        } catch (error) {
+            console.error("计算总支出失败：", error);
+            throw new HttpError("计算总支出失败", 500);
+        }
     }
 
+    /**
+     * 创建预算（基于 cycle_type 校验唯一性，创建后自动计算并更新实际支出）
+     */
     /**
      * 创建预算（基于 cycle_type 校验唯一性，创建后自动计算并更新实际支出）
      */
@@ -183,6 +212,8 @@ class BillModule {
         let budgetId: number | undefined;
         let isUpdate = false;
         let categoryCount = 0;
+        // 存储有效分类ID（用于后续更新is_deleted）
+        let validCategoryIds: number[] = [];
 
         // 2. 预算已存在 → 执行更新逻辑
         if (!isUnique) {
@@ -286,8 +317,6 @@ class BillModule {
             const validCategories = [];
             for (const item of categories) {
                 const categoryId = Number(item.category_id);
-                // 基础校验：必须是正整数
-                console.log(categoryId)
                 if (!Number.isInteger(categoryId) || categoryId <= 0) {
                     console.warn(`跳过非法分类ID：${item.category_id}（非正整数）`);
                     continue;
@@ -310,8 +339,9 @@ class BillModule {
                     ...item,
                     category_id: categoryId // 确保是数字类型
                 });
+                // 收集有效分类ID（用于后续更新is_deleted）
+                validCategoryIds.push(categoryId);
             }
-    console.log(validCategories)
             if (validCategories.length === 0) {
                 console.warn("无有效分类预算数据，跳过分类预算处理");
             } else {
@@ -333,27 +363,26 @@ class BillModule {
                     // 4.3 批量UPSERT分类预算（仅处理合法分类）
                     const [categoryResult] = await pool.execute(
                         `INSERT INTO ${this.budgetCategoryTableName}
-                     (user_id, book_id, budget_id, category_id, category_name, category_amount, sort_order, is_active,
-                      created_at, updated_at)
-                     VALUES ${categoryParams.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",")} 
-                     ON DUPLICATE KEY UPDATE
-                         category_name = VALUES(category_name), 
-                         category_amount = VALUES(category_amount), 
-                         sort_order = VALUES(sort_order), 
-                         is_active = VALUES(is_active), 
-                         updated_at = VALUES(updated_at)`,
+                         (user_id, book_id, budget_id, category_id, category_name, category_amount, sort_order, is_active,
+                          created_at, updated_at)
+                         VALUES ${categoryParams.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",")}
+                             ON DUPLICATE KEY UPDATE
+                                                  category_name = VALUES(category_name),
+                                                  category_amount = VALUES(category_amount),
+                                                  sort_order = VALUES(sort_order),
+                                                  is_active = VALUES(is_active),
+                                                  updated_at = VALUES(updated_at)`,
                         categoryParams.flat()
                     );
                     categoryCount = (categoryResult as any).affectedRows;
-
                     // 4.4 计算并更新分类实际支出金额
                     for (const item of validCategories) {
                         const categoryId = item.category_id as number;
                         const categoryName = item.category_name;
                         const categoryActualAmount =
                             await this.calculateCategoryActualExpense(
-                                budgetData.user_id,
-                                budgetData.book_id,
+                                Number(budgetData.user_id),
+                                Number(budgetData.book_id),
                                 budgetData.cycle_start,
                                 cycleEnd,
                                 categoryId
@@ -362,15 +391,15 @@ class BillModule {
                         // 更新分类实际支出
                         await pool.execute(
                             `UPDATE ${this.budgetCategoryTableName}
-                         SET category_actual_amount = ?,
-                             remaining_percent      = IF(
-                                     category_amount = 0,
-                                     0,
-                                     ROUND(((category_amount - ?) / category_amount) * 100, 2)
-                                                      ),
-                             updated_at             = NOW()
-                         WHERE budget_id = ?
-                           AND category_id = ?`,
+                             SET category_actual_amount = ?,
+                                 remaining_percent      = IF(
+                                         category_amount = 0,
+                                         0,
+                                         ROUND(((category_amount - ?) / category_amount) * 100, 2)
+                                                          ),
+                                 updated_at             = NOW()
+                             WHERE budget_id = ?
+                               AND category_id = ?`,
                             [categoryActualAmount, categoryActualAmount, budgetId, categoryId]
                         );
                         console.log(
@@ -433,6 +462,7 @@ class BillModule {
                 );
                 // 检查更新是否生效
                 const affectedRows = (updateResult as any).affectedRows;
+                console.log(affectedRows, 213);
                 if (affectedRows === 0) {
                     console.error(
                         `更新主预算实际支出失败：预算ID ${budgetId} 不存在或金额未变化`,
@@ -446,6 +476,32 @@ class BillModule {
                     console.log(
                         `主预算ID ${budgetId} 实际支出更新成功：${actualAmount}元`
                     );
+
+                    // ===== 新增核心逻辑：更新分类预算的is_deleted为0 =====
+                    if (validCategoryIds.length > 0) {
+                        try {
+                            // 批量更新对应分类预算的is_deleted为0
+                            const [deleteUpdateResult] = await pool.execute(
+                                `UPDATE ${this.budgetCategoryTableName}
+                             SET is_deleted = 0,
+                                 updated_at = NOW()
+                             WHERE budget_id = ?
+                               AND category_id IN (${validCategoryIds.map(() => '?').join(',')})`,
+                                [budgetId, ...validCategoryIds] // 参数：预算ID + 所有有效分类ID
+                            );
+                            const deleteAffectedRows = (deleteUpdateResult as any).affectedRows;
+                            console.log(
+                                `分类预算is_deleted更新成功：预算ID ${budgetId}，分类ID列表 ${validCategoryIds.join(',')}，影响行数 ${deleteAffectedRows}`
+                            );
+                        } catch (error: any) {
+                            console.error(
+                                `更新分类预算is_deleted失败：预算ID ${budgetId}，分类ID列表 ${validCategoryIds.join(',')}`,
+                                error.message
+                            );
+                            // 此处可选择抛出错误或仅日志（根据业务是否强依赖）
+                            // throw new HttpError(`更新分类预算删除状态失败：${error.message}`, 500);
+                        }
+                    }
                 }
             } catch (error: any) {
                 console.error(`更新主预算实际支出SQL执行失败：`, error.message, {
@@ -482,7 +538,6 @@ class BillModule {
             message: message,
         };
     }
-
     /**
      * 计算指定周期内特定分类的支出总金额
      * @param user_id 用户ID
@@ -508,24 +563,42 @@ class BillModule {
             throw new HttpError("日期错误：开始日期不能晚于结束日期", 400);
         }
 
-        // 查询账单表中该分类的支出总金额（type=2 表示支出）
-        const [rows] = await pool.execute(
-            `SELECT IFNULL(SUM(amount), 0) AS total_expense
+        try {
+            // 核心：不拼接时间，直接用日期 + >= / < 逻辑
+            const [rows] = await pool.execute(
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
              FROM ${this.billTableName}
              WHERE user_id = ?
                AND book_id = ?
-               AND type = 2        -- 支出类型
-               AND is_deleted = 0 -- 未删除
-               AND category_id = ? -- 特定分类
-               AND bill_time BETWEEN ? AND ?`,
-            [user_id, book_id, category_id, cycle_start, cycle_end]
-        );
+               AND type = ?        -- 用参数避免类型不匹配
+               AND is_deleted = ?  -- 用参数避免类型不匹配
+               AND category_id = ?
+               -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
+               AND bill_time >= ?  
+               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                [
+                    Number(user_id),
+                    Number(book_id),
+                    '2',          // 按数据库实际存储类型传（字符串/数字）
+                    '0',          // 按数据库实际存储类型传（字符串/数字）
+                    Number(category_id),
+                    cycle_start,  // 直接传 2025-12-01，数据库会自动补 00:00:00
+                    cycle_end     // 直接传 2025-12-31，DATE_ADD 后是 2026-01-01
+                ]
+            );
 
-        // 格式化金额（保留2位小数）
-        const resultRows = rows as Array<{ total_expense: number | string }>;
-        const rawTotal = resultRows[0]?.total_expense ?? 0;
-        const totalExpense = Number(rawTotal);
-        return Math.round(totalExpense * 100) / 100;
+            // 调试日志（保留）
+            const resultRows = rows as Array<{ total_expense: number | string }>;
+            console.log("【调试】SQL结果：", resultRows[0]);
+
+            // 格式化金额
+            const rawTotal = resultRows[0]?.total_expense ?? 0;
+            const totalExpense = Number(rawTotal);
+            return Math.round(totalExpense * 100) / 100;
+        } catch (error) {
+            console.error("计算支出失败：", error);
+            throw new HttpError("计算支出失败", 500);
+        }
     }
 
     // 原有辅助方法保留
@@ -697,23 +770,45 @@ class BillModule {
             }
 
             // 3. 查询指定周期内类型为2的账单总金额
+            // const [billRows] = await pool.execute(
+            //     `SELECT IFNULL(SUM(amount), 0) AS total_amount
+            //  FROM mate_bill
+            //  WHERE user_id = ?
+            //    AND book_id = ?
+            //    AND type = 2
+            //    AND is_deleted = 0
+            //    AND bill_time BETWEEN ? AND ?`,
+            //
+            //     [userId, bookId, cycle_start, cycle_end]
+            // );
             const [billRows] = await pool.execute(
-                `SELECT IFNULL(SUM(amount), 0) AS total_amount 
-             FROM mate_bill 
-             WHERE user_id = ? 
-               AND book_id = ? 
-               AND type = 2    
-               AND is_deleted = 0
-               AND bill_time BETWEEN ? AND ?`,
-                [userId, bookId, cycle_start, cycle_end]
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
+             FROM ${this.billTableName}
+             WHERE user_id = ?
+               AND book_id = ?
+               AND type = ?        -- 用参数避免类型不匹配
+               AND is_deleted = ?  -- 用参数避免类型不匹配
+               -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
+               AND bill_time >= ?  
+               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                [
+                    Number(userId),
+                    Number(bookId),
+                    '2',          // 按数据库实际存储类型传（字符串/数字）
+                    '0',          // 按数据库实际存储类型传（字符串/数字）
+                    cycle_start,  // 直接传 2025-12-01，数据库会自动补 00:00:00
+                    cycle_end     // 直接传 2025-12-31，DATE_ADD 后是 2026-01-01
+                ]
             );
-            // 计算实际使用金额（保留2位小数）
-            const actualAmount = parseFloat((billRows as any[])[0].total_amount || 0).toFixed(2);
-
-            // 4. 更新预算表中的actual_amount字段
+            // // 计算实际使用金额（保留2位小数）
+            console.log("【调试】SQL结果：", billRows as any[]);
+            const actualAmount = parseFloat((billRows as any[])[0].total_expense || 0).toFixed(2);
+            console.log(actualAmount,"主预算表消费金额")
+            //
+            // // 4. 更新预算表中的actual_amount字段
             await pool.execute(
-                `UPDATE ${this.budgetTableName} 
-             SET actual_amount = ?, 
+                `UPDATE ${this.budgetTableName}
+             SET actual_amount = ?,
                  remaining_percent = ROUND((1 - (? / IF(amount = 0, 1, amount))) * 100, 2)
              WHERE id = ? AND user_id = ?`,
                 [actualAmount, actualAmount, budgetId, userId]
@@ -846,7 +941,7 @@ class BillModule {
             let categories = await this.getBudgetCategoryList(
                 userId,
                 bookId,
-                budgetId
+                budgetId,
             );
 
             // 格式化最终返回数据（移除重复的cycle_type定义）
@@ -894,6 +989,18 @@ class BillModule {
         budgetId: number
     ) {
         try {
+
+            const [budgetRow] = await pool.execute(
+                `SELECT
+                     DATE_FORMAT(b.cycle_start, '%Y-%m-%d') AS cycleStart,
+                     DATE_FORMAT(b.cycle_end, '%Y-%m-%d') AS cycleEnd
+                 FROM ${this.budgetTableName} b
+                 WHERE b.id = ?
+                     LIMIT 1`,
+                [budgetId]
+            );
+          let   budgetInfo =   (budgetRow as any[])[0];
+          console.log(budgetInfo)
             // 构建格式化后的SQL语句（新增剩余金额字段）
             let querySql = `
                 SELECT id,
@@ -918,16 +1025,50 @@ class BillModule {
                 WHERE user_id = ?
                   AND book_id = ?
                   AND budget_id = ?
+                  AND is_deleted = 0
                   AND category_amount > 0
             `;
             let queryParams = [userId, bookId, budgetId];
 
             // 执行查询
             const [rows] = await pool.execute(querySql, queryParams);
+            console.log(budgetInfo)
             // @ts-ignore
-            rows.forEach((item) => {
-                item.status = true;
-            });
+            for (const item of rows) {
+                item.status = true
+                const categoryId = item.category_id as number;
+                const categoryName = item.category_name;
+                const categoryActualAmount =
+                    await this.calculateCategoryActualExpense(
+                        Number(userId),
+                        Number(bookId),
+                        (budgetInfo.cycleStart),
+                (budgetInfo.cycleEnd),
+                        categoryId
+                    );
+
+                // 更新分类实际支出
+                await pool.execute(
+                    `UPDATE ${this.budgetCategoryTableName}
+                             SET category_actual_amount = ?,
+                                 remaining_percent      = IF(
+                                         category_amount = 0,
+                                         0,
+                                         ROUND(((category_amount - ?) / category_amount) * 100, 2)
+                                                          ),
+                                 updated_at             = NOW()
+                             WHERE budget_id = ?
+                               AND category_id = ?`,
+                    [categoryActualAmount, categoryActualAmount, budgetId, categoryId]
+                );
+                console.log(
+                    `分类[ID:${categoryId}${categoryName ? `(${categoryName})` : ''}] 实际支出更新为：${categoryActualAmount}元`
+                );
+            }
+
+            // rows.forEach((item) => {
+            //     item.status = true;
+            // });
             return rows; // 直接返回SQL格式化后的结果，包含剩余金额字段
         } catch (error) {
             console.error("查询预算分类失败：", error);

@@ -4,7 +4,7 @@ import {
   create,
   list,
   cateBindBill,deleteCate,
-  getDeletelist,removelist,
+  getDeletelist,removelist,cateBillList
 } from "../../controllers/miniProgram/categoryController";
 
 const router: Router = Router();
@@ -21,4 +21,7 @@ router.post("/miniProgram/category/deleteCate", deleteCate); // 删除类别
 router.post("/miniProgram/category/getDeletList", getDeletelist); // 被删除类别列表
 // @ts-ignore
 router.post("/miniProgram/category/removelist", removelist); // 还原类别
+
+// @ts-ignore
+router.post("/miniProgram/category/cateBillList", cateBillList); // 分类账单列表
 export default router;

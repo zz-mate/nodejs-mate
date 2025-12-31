@@ -4,55 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="优化预算百分比">
+    <list default="true" id="67aa982a-e5d8-4e64-bf81-593a90a284b4" name="更改" comment="账单逻辑删除">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/config/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/config/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/accountCategoryController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/accountCategoryController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/accountController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/accountController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/authController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/billController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/billController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/bookCategoryController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/bookCategoryController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/bookController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/bookController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/budgetCategoryController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/budgetCategoryController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/budgetController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/budgetController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/calendarController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/calendarController.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/categoryController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/categoryController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/compensationController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/compensationController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/demoController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/demoController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/pointController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/pointController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/userController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/userController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controllers/miniProgram/weixinController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/controllers/miniProgram/weixinController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AccountCategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AccountCategoryModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AccountModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AccountModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/AuthModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BookCategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookCategoryModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BookModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BudgetCategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BudgetCategoryModule.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/CalendarModule.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/CategoryModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/CategoryModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/PointModule.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/UserModule.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/modules/miniProgram/WxModules.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/modules/miniProgram/WxModules.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/routes/miniProgram/categoryRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/routes/miniProgram/categoryRoutes.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/accountCategoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/accountCategoryService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/accountService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/accountService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/authService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/billService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/bookCategoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/bookCategoryService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/bookService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/bookService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/budgetCategoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/budgetCategoryService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/budgetService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/budgetService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/calendarService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/calendarService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/services/miniProgram/categoryService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/categoryService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/demoService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/demoService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/pointService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/services/miniProgram/userService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/services/miniProgram/userService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/tools/usernameGenerator.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -185,7 +144,8 @@
       <workItem from="1766848243238" duration="4037000" />
       <workItem from="1766881589587" duration="10219000" />
       <workItem from="1767018461722" duration="5028000" />
-      <workItem from="1767054689140" duration="22326000" />
+      <workItem from="1767054689140" duration="22728000" />
+      <workItem from="1767144566938" duration="16237000" />
     </task>
     <task id="LOCAL-00001" summary="git commit -m &quot;🆕 初始化项目：搭建基础目录结构+配置.gitignore&quot;">
       <option name="closed" value="true" />
@@ -283,7 +243,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766933063365</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="账单逻辑删除">
+      <option name="closed" value="true" />
+      <created>1767111112288</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1767111112290</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -314,16 +282,12 @@
     <MESSAGE value="新增资产分类" />
     <MESSAGE value="优化经验模块" />
     <MESSAGE value="优化预算百分比" />
-    <option name="LAST_COMMIT_MESSAGE" value="优化预算百分比" />
+    <MESSAGE value="账单逻辑删除" />
+    <option name="LAST_COMMIT_MESSAGE" value="账单逻辑删除" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts</url>
-          <line>496</line>
-          <option name="timeStamp" value="4" />
-        </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts</url>
           <line>69</line>
@@ -346,18 +310,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts</url>
-          <line>24</line>
+          <line>11</line>
           <option name="timeStamp" value="13" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/src/modules/miniProgram/BudgetModule.ts</url>
-          <line>483</line>
-          <option name="timeStamp" value="14" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/modules/miniProgram/BillModule.ts</url>
           <line>198</line>
-          <properties lambdaOrdinal="-1" />
           <option name="timeStamp" value="15" />
         </line-breakpoint>
       </breakpoints>
