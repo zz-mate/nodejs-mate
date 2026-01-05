@@ -1,6 +1,6 @@
 import {
   categoryCreateService,deleteCateCategoryService,
-  categoryListService,cateBindBillCategoryService,deleteListCategoryService,removeListCategoryService,categoryBillListService
+  categoryListService,cateBindBillCategoryService,deleteListCategoryService,removeListCategoryService,categoryBillListService,categorySortService
 } from "../../services/miniProgram/categoryService";
 
 /**
@@ -85,6 +85,15 @@ export const cateBillList = async (req: Request, res: Response) => {
         // @ts-ignore
         //   await categoryListService(req,res);
         let result = await categoryBillListService(req, res);
+        // @ts-ignore
+        return res.status(200).json(result);
+    } catch (err) {}
+};
+export const cateSort = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        //   await categoryListService(req,res);
+        let result = await categorySortService(req, res);
         // @ts-ignore
         return res.status(200).json(result);
     } catch (err) {}

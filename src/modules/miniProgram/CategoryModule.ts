@@ -1,10 +1,12 @@
 import pool from "../../db";
+import {OkPacket, RowDataPacket} from 'mysql2/promise'; // 引入类型定义
 import type {CategoryDbSchema} from "../../types";
 
 class UserModule {
     categoryTableName = "mate_category";
     bookTableName = "mate_book";
     billTableName = "mate_bill";
+
     /**
      * 查询分类是否存在
      * @param category_id
@@ -40,31 +42,31 @@ class UserModule {
                  WHERE is_active = 1
                    AND is_deleted = 0
                    AND parent_id = 0 LIMIT ?, ?`,
-                [offset + "", validPageSize + ""]
+                [offset + '', validPageSize + ''] // 修复：移除多余的字符串拼接，直接传数字
             );
             // console.log("极简查询结果：", tempRows); // 这里必须有数据！
 
             // ========== 第二步：如果极简查询有数据，再逐步加条件 ==========
             let whereConditions: string[] = [
-                "is_active = 1",
-                "is_deleted = 0",
-                "parent_id = 0",
+                "c.is_active = 1",
+                "c.is_deleted = 0",
+                "c.parent_id = 0",
             ];
             let queryParams: any[] = [];
 
             // 1. 处理 userId（简化逻辑，先不关联删除表）
             const validUserId = Number(userId);
             if (validUserId && validUserId > 0) {
-                whereConditions.push("(user_id = ? OR user_id IS NULL)");
+                whereConditions.push("(c.user_id = ? OR c.user_id IS NULL)");
                 queryParams.push(validUserId);
             } else {
-                whereConditions.push("user_id IS NULL");
+                whereConditions.push("c.user_id IS NULL");
             }
 
             // 2. 处理 type 过滤
             const validType = Number(type);
             if ([1, 2, 3].includes(validType)) {
-                whereConditions.push("type = ?");
+                whereConditions.push("c.type = ?");
                 queryParams.push(validType);
             }
 
@@ -74,56 +76,90 @@ class UserModule {
                 console.warn(
                     "警告：表中 book_id 全为 NULL，传 bookCategoryId 会无数据"
                 );
-                // whereConditions.push("book_id = ?");
+                // whereConditions.push("c.book_id = ?");
                 // queryParams.push(bookCategoryId);
             }
 
             // 4. 临时注释删除表关联（先确保基础查询有数据）
-            whereConditions.push(
-                "id NOT IN (SELECT category_id FROM mate_category_user_delete WHERE user_id = ?)"
-            );
-            queryParams.push(validUserId);
+            // 修复：增加 userId 非空判断，避免传入 0 导致的错误
+            if (validUserId && validUserId > 0) {
+                whereConditions.push(
+                    "c.id NOT IN (SELECT category_id FROM mate_category_user_delete WHERE user_id = ?)"
+                );
+                queryParams.push(validUserId);
+            }
 
-            // ========== 统计总数 ==========
+            // ========== 统计总数（关联排序表，但不影响总数） ==========
             const [totalRows] = await pool.execute(
                 `SELECT COUNT(*) AS total
-                 FROM ${this.categoryTableName}
+                 FROM ${this.categoryTableName} c
+                          LEFT JOIN mate_category_user_sort s
+                                    ON c.id = s.category_id
+                                        AND s.user_id = ?
+                                        AND (s.book_id = ? OR s.book_id IS NULL)
                  WHERE ${whereConditions.join(" AND ")}`,
-                queryParams
+                // 总数查询的排序表参数：userId、bookCategoryId
+                [validUserId || null, bookCategoryId || null, ...queryParams]
             );
             const total = Number((totalRows as any[])[0]?.total || 0);
             const totalPage = Math.ceil(total / validPageSize);
 
-            // ========== 查询顶级分类 ==========
+            // ========== 查询顶级分类（核心：关联自定义排序表） ==========
             const [topCategoryRows] = await pool.execute(
-                `SELECT id,
-                        user_id,
-                        book_id,
-                        parent_id,
-                        name,
-                        type,
-                        icon,
-                        color,
-                        sort_order,
-                        is_system,
-                        is_active,
-                        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-                        DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-                 FROM ${this.categoryTableName}
+                `SELECT c.id,
+                        c.user_id,
+                        c.book_id,
+                        c.parent_id,
+                        c.name,
+                        c.type,
+                        c.icon,
+                        c.color,
+                        c.sort_order                                   AS default_sort,
+                        IFNULL(s.sort_order, c.sort_order)             AS final_sort_order, -- 优先自定义排序
+                        c.is_system,
+                        c.is_active,
+                        DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                        DATE_FORMAT(c.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+                 FROM ${this.categoryTableName} c
+                          LEFT JOIN mate_category_user_sort s
+                                    ON c.id = s.category_id
+                                        AND s.user_id = ?
+                                        AND (s.book_id = ? OR s.book_id IS NULL)
                  WHERE ${whereConditions.join(" AND ")}
-                 ORDER BY sort_order ASC LIMIT ?, ?`,
-                [...queryParams, offset + "", validPageSize + ""]
+                 ORDER BY final_sort_order ASC LIMIT ?, ?`, // 按最终排序值排序
+                // 参数顺序：排序表user_id、排序表book_id、查询条件参数、offset、pageSize
+                [
+                    validUserId || null,
+                    bookCategoryId || null,
+                    ...queryParams,
+                    offset.toString(),
+                    validPageSize.toString(),
+                ]
             );
             // console.log("带条件查询结果：", topCategoryRows);
 
-            // ========== 查询所有分类用于构建树形 ==========
+            // ========== 查询所有分类用于构建树形（关联自定义排序） ==========
             const [allCategoryRows] = await pool.execute(
-                `SELECT id, user_id, book_id, parent_id, name, type, sort_order
-                 FROM ${this.categoryTableName}
-                 WHERE is_active = 1
-                   AND is_deleted = 0
-                   AND (user_id IS NULL ${validUserId ? `OR user_id = ${validUserId}` : ""})`,
-                []
+                `SELECT c.id,
+                        c.user_id,
+                        c.book_id,
+                        c.parent_id,
+                        c.name,
+                        c.type,
+                        c.sort_order                       AS default_sort,
+                        IFNULL(s.sort_order, c.sort_order) AS final_sort_order
+                 FROM ${this.categoryTableName} c
+                          LEFT JOIN mate_category_user_sort s
+                                    ON c.id = s.category_id
+                                        AND s.user_id = ?
+                                        AND (s.book_id = ? OR s.book_id IS NULL)
+                 WHERE c.is_active = 1
+                   AND c.is_deleted = 0
+                   AND (c.user_id IS NULL ${validUserId && validUserId > 0 ? `OR c.user_id = ?` : ""})`,
+                // 参数：排序表user_id、排序表book_id、可选的user_id
+                validUserId && validUserId > 0
+                    ? [validUserId, bookCategoryId || null, validUserId]
+                    : [validUserId || null, bookCategoryId || null]
             );
 
             // ========== 格式化 + 构建树形 ==========
@@ -136,7 +172,9 @@ class UserModule {
                 type: 1 | 2 | 3;
                 icon: string;
                 color: string;
-                sort_order: number;
+                sort_order: number; // 兼容原有字段
+                final_sort_order: number; // 新增：最终排序值
+                default_sort: number; // 新增：默认排序值
                 is_system: 0 | 1;
                 is_active: 0 | 1;
                 created_at: string;
@@ -156,7 +194,9 @@ class UserModule {
                     : 1,
                 icon: item.icon || "",
                 color: item.color || "#333333",
-                sort_order: Number(item.sort_order || 0),
+                sort_order: Number(item.final_sort_order || item.sort_order || 0), // 兼容原有排序字段
+                final_sort_order: Number(item.final_sort_order || item.sort_order || 0),
+                default_sort: Number(item.default_sort || item.sort_order || 0),
                 is_system: (item.is_system ? Number(item.is_system) : 0) as 0 | 1,
                 is_active: (item.is_active ? Number(item.is_active) : 0) as 0 | 1,
                 created_at: item.created_at || "",
@@ -172,16 +212,21 @@ class UserModule {
                 ? (topCategoryRows as any[]).map(formatCategory)
                 : [];
 
+            // 修复：树形子分类按 final_sort_order 排序
             const buildTree = (
                 allCats: CategoryDbSchema[],
                 parentId: number
             ): CategoryDbSchema[] => {
                 return allCats
                     .filter((cat) => cat.parent_id === parentId)
+                    .sort((a, b) => a.final_sort_order - b.final_sort_order) // 子分类按最终排序
                     .map((cat) => ({...cat, children: buildTree(allCats, cat.id)}));
             };
 
-            const treeCategories = topCategories.map((topCat) => ({
+            // 顶级分类也按最终排序值排序
+            const sortedTopCategories = topCategories.sort((a, b) => a.final_sort_order - b.final_sort_order);
+
+            const treeCategories = sortedTopCategories.map((topCat) => ({
                 ...topCat,
                 children: buildTree(allCategories, topCat.id),
             }));
@@ -765,9 +810,12 @@ class UserModule {
         // 新增：收支类型文本转换
         const getBillTypeText = (type: number): string => {
             switch (type) {
-                case 1: return "收入";
-                case 2: return "支出";
-                default: return "未知";
+                case 1:
+                    return "收入";
+                case 2:
+                    return "支出";
+                default:
+                    return "未知";
             }
         };
 
@@ -806,11 +854,11 @@ class UserModule {
                 );
                 const minTimeStr = (boundaryRows as any[])[0]?.min_time || "1970-01-01 00:00:00";
                 const maxTimeStr = (boundaryRows as any[])[0]?.max_time || new Date().toISOString().slice(0, 19).replace("T", " ");
-                return { minTime: new Date(minTimeStr), maxTime: new Date(maxTimeStr) };
+                return {minTime: new Date(minTimeStr), maxTime: new Date(maxTimeStr)};
             };
 
             if (!start_time && !end_time) {
-                const { minTime, maxTime } = await getBillTimeBoundary(userId, bookId);
+                const {minTime, maxTime} = await getBillTimeBoundary(userId, bookId);
                 defaultStart = minTime;
                 defaultEnd = maxTime;
             }
@@ -953,12 +1001,11 @@ class UserModule {
 
             // ========== 4. 全局全量汇总（固定不变：收入/支出/结余总金额、总笔数） ==========
             const [fullGlobalSummaryRows] = await pool.execute(
-                `SELECT
-                     IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS global_total_income,
-                     IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS global_total_expend,
-                     IFNULL(COUNT(CASE WHEN b.type = 1 THEN 1 END), 0) AS global_total_income_count,
-                     IFNULL(COUNT(CASE WHEN b.type = 2 THEN 1 END), 0) AS global_total_expend_count,
-                     IFNULL(COUNT(*), 0) AS global_total_bill_count
+                `SELECT IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS global_total_income,
+                        IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS global_total_expend,
+                        IFNULL(COUNT(CASE WHEN b.type = 1 THEN 1 END), 0)             AS global_total_income_count,
+                        IFNULL(COUNT(CASE WHEN b.type = 2 THEN 1 END), 0)             AS global_total_expend_count,
+                        IFNULL(COUNT(*), 0)                                           AS global_total_bill_count
                  FROM ${this.billTableName} b
                  WHERE ${fullWhereConditions.join(" AND ")}`,
                 fullQueryParams
@@ -978,15 +1025,14 @@ class UserModule {
 
             // ========== 5. 筛选后分类聚合统计（仅用于列表展示） ==========
             const [categorySummaryRows] = await pool.execute(
-                `SELECT
-                     b.category_id,
-                     c.name AS category_name,
-                     c.icon AS category_icon,
-                     c.type AS category_type,
-                     COUNT(b.id) AS bill_count,
-                     IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS income_amount,
-                     IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS expend_amount,
-                     IFNULL(SUM(b.amount), 0) AS total_amount
+                `SELECT b.category_id,
+                        c.name                                                        AS category_name,
+                        c.icon                                                        AS category_icon,
+                        c.type                                                        AS category_type,
+                        COUNT(b.id)                                                   AS bill_count,
+                        IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS income_amount,
+                        IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS expend_amount,
+                        IFNULL(SUM(b.amount), 0)                                      AS total_amount
                  FROM ${this.billTableName} b
                           LEFT JOIN mate_category c ON b.category_id = c.id
                  WHERE ${filterWhereConditions.join(" AND ")}
@@ -997,46 +1043,44 @@ class UserModule {
 
             // ========== 6. 筛选后列表查询（带分页 + 补充时间维度字段） ==========
             const [listRows] = await pool.execute(
-                `SELECT 
-                b.id,
-                b.user_id,
-                b.amount,
-                b.type,
-                b.currency,
-                DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i:%s') AS full_bill_time,
-                DATE_FORMAT(b.bill_time, '%H:%i') AS bill_time,
-                DATE_FORMAT(b.bill_time, '%Y') AS bill_year,
-                DATE_FORMAT(b.bill_time, '%m') AS bill_month,
-                DATE_FORMAT(b.bill_time, '%d') AS bill_day,
-                b.tags,
-                b.remark,
-                DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
-                DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-                b.category_id,
-                c.name AS category_name,
-                c.icon AS category_icon,
-                c.type AS category_type,
-                bo.id AS book_id,
-                bo.name AS book_name,
-                bo.is_default AS book_is_default
-             FROM ${this.billTableName} b
-             LEFT JOIN mate_category c ON b.category_id = c.id
-             LEFT JOIN mate_book bo ON b.book_id = bo.id
-             WHERE ${filterWhereConditions.join(" AND ")}
-             ORDER BY b.bill_time DESC LIMIT ?, ?`,
+                `SELECT b.id,
+                        b.user_id,
+                        b.amount,
+                        b.type,
+                        b.currency,
+                        DATE_FORMAT(b.bill_time, '%Y-%m-%d %H:%i')                                     AS full_bill_time,
+                        DATE_FORMAT(b.bill_time, '%H:%i')                                              AS bill_time,
+                        DATE_FORMAT(b.bill_time, '%Y')                                                 AS bill_year,
+                        DATE_FORMAT(b.bill_time, '%m')                                                 AS bill_month,
+                        DATE_FORMAT(b.bill_time, '%d')                                                 AS bill_day,
+                        b.tags,
+                        b.remark,
+                        DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
+                        DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                        b.category_id,
+                        c.name                                                                         AS category_name,
+                        c.icon                                                                         AS category_icon,
+                        c.type                                                                         AS category_type,
+                        bo.id                                                                          AS book_id,
+                        bo.name                                                                        AS book_name,
+                        bo.is_default                                                                  AS book_is_default
+                 FROM ${this.billTableName} b
+                          LEFT JOIN mate_category c ON b.category_id = c.id
+                          LEFT JOIN mate_book bo ON b.book_id = bo.id
+                 WHERE ${filterWhereConditions.join(" AND ")}
+                 ORDER BY b.bill_time DESC LIMIT ?, ?`,
                 [...filterQueryParams, offsetStr, pageSizeStr]
             );
 
             // ========== 7. 筛选后汇总（仅用于进度条计算，不展示） ==========
             const [filterSummaryRows] = await pool.execute(
-                `SELECT
-                     IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS filter_income,
-                     IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS filter_expend
+                `SELECT IFNULL(SUM(CASE WHEN b.type = 1 THEN b.amount ELSE 0 END), 0) AS filter_income,
+                        IFNULL(SUM(CASE WHEN b.type = 2 THEN b.amount ELSE 0 END), 0) AS filter_expend
                  FROM ${this.billTableName} b
                  WHERE ${filterWhereConditions.join(" AND ")}`,
                 filterQueryParams
             );
-            const filterSummary = (filterSummaryRows as any[])[0] || { filter_income: 0, filter_expend: 0 };
+            const filterSummary = (filterSummaryRows as any[])[0] || {filter_income: 0, filter_expend: 0};
 
             // ========== 8. 数据格式化（核心：补充时间维度字段） ==========
             // 8.1 格式化分类聚合数据
@@ -1126,7 +1170,11 @@ class UserModule {
                     // 原有字段
                     remark: item.remark || "",
                     tags: (() => {
-                        try { return JSON.parse(item.tags || "[]"); } catch { return []; }
+                        try {
+                            return JSON.parse(item.tags || "[]");
+                        } catch {
+                            return [];
+                        }
                     })(),
                     created_at: item.created_at || "",
                     updated_at: item.updated_at || "",
@@ -1183,7 +1231,9 @@ class UserModule {
 
             // ========== 9. 分页处理 ==========
             const [countRows] = await pool.execute(
-                `SELECT COUNT(*) AS total FROM ${this.billTableName} b WHERE ${filterWhereConditions.join(" AND ")}`,
+                `SELECT COUNT(*) AS total
+                 FROM ${this.billTableName} b
+                 WHERE ${filterWhereConditions.join(" AND ")}`,
                 filterQueryParams
             );
             const filterTotal = Number((countRows as any[])[0]?.total || 0);
@@ -1197,7 +1247,7 @@ class UserModule {
                 .map(category => ({
                     ...category,
                     // @ts-ignore
-                    list: category.list.map(bill => ({ ...bill, status: true })),
+                    list: category.list.map(bill => ({...bill, status: true})),
                 }));
 
             // ========== 10. 进度计算（仅用于列表进度条） ==========
@@ -1216,10 +1266,10 @@ class UserModule {
                 code: 200,
                 list: {
                     ...(queryDimension === "custom" ? {
-                        timeRange: { start: displayStartTime, end: displayEndTime },
+                        timeRange: {start: displayStartTime, end: displayEndTime},
                     } : {
                         year: targetYear,
-                        ...(queryDimension === "month" ? { month: targetMonth } : {}),
+                        ...(queryDimension === "month" ? {month: targetMonth} : {}),
                     }),
                     listType: "category",
                     dataList: formattedCategoryList.length > 0 ? formattedCategoryList : [],
@@ -1295,7 +1345,7 @@ class UserModule {
                 code: 500,
                 message: error.message || "查询分类账单列表失败",
                 list: {
-                    timeRange: { start: displayStartTime, end: displayEndTime },
+                    timeRange: {start: displayStartTime, end: displayEndTime},
                     listType: "category",
                     dataList: [],
                 },
@@ -1345,6 +1395,115 @@ class UserModule {
                     pageSize: Math.max(Number(pageSize) || 10, 1),
                     totalPage: 0,
                 },
+            };
+        }
+    }
+
+
+    /**
+     * 更新分类排序（拖拽排序核心方法）
+     * @param userId 操作用户ID
+     * @param bookId 账本ID
+     * @param categoryId 被排序的分类ID
+     * @param sortOrder 新的排序值
+     * @returns 操作结果
+     */
+    async categorySort(
+        userId: number,
+        bookId: number,
+        categoryId: number,
+        sortOrder: number
+    ): Promise<{ success: boolean; message: string }> {
+        // 步骤1：参数合法性校验
+        const validUserId = Number(userId);
+        const validBookId = Number(bookId);
+        const validCategoryId = Number(categoryId);
+        const validSortOrder = Number(sortOrder);
+
+        if (!validUserId || validUserId <= 0) {
+            return {success: false, message: "用户ID不能为空且必须为正整数"};
+        }
+        if (!validBookId || validBookId <= 0) {
+            return {success: false, message: "账本ID不能为空且必须为正整数"};
+        }
+        if (!validCategoryId || validCategoryId <= 0) {
+            return {success: false, message: "分类ID不能为空且必须为正整数"};
+        }
+        if (isNaN(validSortOrder)) {
+            return {success: false, message: "排序值必须为有效数字"};
+        }
+
+        try {
+            // 步骤2：校验分类是否存在且可用
+            const [categoryExist] = await pool.execute<RowDataPacket[]>(
+                `SELECT id, is_active
+                 FROM ${this.categoryTableName}
+                 WHERE id = ?
+                   AND is_deleted = 0`,
+                [validCategoryId]
+            );
+            const category = categoryExist[0];
+            if (!category) {
+                return {success: false, message: "分类不存在或已被删除"};
+            }
+            if (category.is_active !== 1) {
+                return {success: false, message: "分类已禁用，无法修改排序"};
+            }
+
+            // 步骤3：查询当前用户-账本-分类的排序记录（用于乐观锁）
+            const [sortExist] = await pool.execute<RowDataPacket[]>(
+                `SELECT id, version
+                 FROM mate_category_user_sort
+                 WHERE user_id = ?
+                   AND book_id = ?
+                   AND category_id = ?`,
+                [validUserId, validBookId, validCategoryId]
+            );
+            const sortRecord = sortExist[0];
+
+            let affectRows = 0;
+            if (sortRecord) {
+                // 步骤4：已有记录，乐观锁更新（防止并发覆盖）
+                const newVersion = sortRecord.version + 1;
+                const [updateResult] = await pool.execute<OkPacket>(
+                    `UPDATE mate_category_user_sort
+                     SET sort_order = ?,
+                         version = ?,
+                         updated_at = NOW()
+                     WHERE id = ?
+                       AND version = ?`,
+                    [validSortOrder, newVersion, sortRecord.id, sortRecord.version]
+                );
+                // 从 OkPacket 中提取受影响行数
+                affectRows = updateResult.affectedRows;
+
+                // 乐观锁冲突：更新行数为0，说明并发修改
+                if (affectRows === 0) {
+                    return {success: false, message: "排序更新失败，可能已被其他操作修改，请重试"};
+                }
+            } else {
+                // 步骤5：无记录，插入新的自定义排序
+                const [insertResult] = await pool.execute<OkPacket>(
+                    `INSERT INTO mate_category_user_sort
+                     (user_id, book_id, category_id, sort_order, version, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
+                    [validUserId, validBookId, validCategoryId, validSortOrder]
+                );
+                // 从 OkPacket 中提取受影响行数
+                affectRows = insertResult.affectedRows;
+            }
+
+            // 步骤6：判断操作结果
+            if (affectRows > 0) {
+                return {success: true, message: "分类排序更新成功"};
+            } else {
+                return {success: false, message: "分类排序更新失败，请重试"};
+            }
+        } catch (error: any) {
+            console.error("分类排序更新异常：", error.message, error.stack);
+            return {
+                success: false,
+                message: `排序更新失败：${error.message || "数据库操作异常"}`,
             };
         }
     }

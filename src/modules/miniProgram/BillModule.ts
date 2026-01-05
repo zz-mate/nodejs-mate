@@ -13,39 +13,44 @@ import userModule from "./UserModule";
 import pointModule from "./PointModule";
 
 class BillModule {
-    billTableName = "mate_bill";
+    private  billTableName = "mate_bill";
+    private  categoryTableName = "mate_category";
     private budgetTableName = "mate_budget";
     private budgetCategoryTableName = "mate_budget_category";
-
+    private categoryUserSortTableName = 'mate_category_user_sort';
     /**
      * 创建账单
-     * @param params
+     * @param params 账单参数
      */
     async create(params: BillDbSchema): Promise<string | undefined> {
-        // 1. 构造默认数据
-        const defaultData = {
-            uuid: uuidv4(),
-            user_id: params.user_id,
-            book_id: params.book_id,
-            consume_user_id: params.consume_user_id,
-            category_id: params.category_id,
-            amount: params.amount,
-            remark: params.remark || "",
-            type: params.type, // 2=支出，1=收入
-            currency: params.currency || "CNY",
-            bill_time: params.bill_time,
-            tags: params.tags || null,
-            created_at: new Date(),
-            updated_at: new Date(),
-        };
-        let result: any;
+        // 开启事务（保证账单创建和排序更新原子性）
+        const connection = await pool.getConnection();
         try {
-            // 2. 执行插入账单SQL
-            [result] = await pool.execute(
+            await connection.beginTransaction();
+
+            // 1. 构造默认数据
+            const defaultData = {
+                uuid: uuidv4(),
+                user_id: params.user_id,
+                book_id: params.book_id,
+                consume_user_id: params.consume_user_id,
+                category_id: params.category_id,
+                amount: params.amount,
+                remark: params.remark || "",
+                type: params.type, // 2=支出，1=收入
+                currency: params.currency || "CNY",
+                bill_time: params.bill_time,
+                tags: params.tags || null,
+                created_at: new Date(),
+                updated_at: new Date(),
+            };
+
+            // 2. 执行插入账单SQL（使用事务连接）
+            const [result] = await connection.execute(
                 `INSERT INTO ${this.billTableName}
-                 (uuid, user_id, book_id, category_id, consume_user_id, amount, type, currency, bill_time, tags, remark,
-                  created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (uuid, user_id, book_id, category_id, consume_user_id, amount, type, currency, bill_time, tags, remark,
+          created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     defaultData.uuid,
                     defaultData.user_id,
@@ -63,26 +68,43 @@ class BillModule {
                 ]
             );
 
+            const insertResult = result as { affectedRows: number; insertId: number };
+
             // 3. 仅处理支出类型的账单（type=2），更新预算实际支出
-            if ((result as any).affectedRows === 1 && defaultData.type === 2) {
-                await this.updateBudgetActualAmountAfterBillCreate(defaultData);
+            if (insertResult.affectedRows == 1 && defaultData.type == 2) {
+                await this.updateBudgetActualAmountAfterBillCreate(defaultData, connection);
             }
+
             /***新增经验 & 积分**START*/
-            await userModule.addBillExp(
-                defaultData.user_id,
-                (result as any).insertId
-            );
-            // await userModule.addExpByBizType(defaultData.user_id, 'bill_add', (result as any).insertId);
+            await userModule.addBillExp(defaultData.user_id, insertResult.insertId);
             await pointModule.addPoints(
                 defaultData.user_id,
-                1, // 奖励1积分
-                "bill_add", // 业务类型：添加账单
-                "新增账单奖励积分", // 备注
-                (result as any).insertId // 业务ID：账单ID（防重复发放）
+                1,
+                "bill_add",
+                "新增账单奖励积分",
+                insertResult.insertId
             );
             /***新增经验 & 积分**END*/
-            return (result as any).affectedRows.toString();
+
+            // 4. 核心逻辑：更新当前分类的排序值，使其靠前
+            if (insertResult.affectedRows === 1 && defaultData.category_id) {
+                await this.updateCategorySortToTop(
+                    defaultData.user_id,
+                    defaultData.book_id,
+                    defaultData.category_id,
+                    defaultData.type,
+                    connection
+                );
+            }
+
+            // 提交事务
+            await connection.commit();
+            return insertResult.affectedRows.toString();
+
         } catch (error) {
+            // 回滚事务
+            await connection.rollback();
+
             const err = error as Error & { code: string };
             if (err.code === "ER_NO_REFERENCED_ROW_2") {
                 console.error("❌ 外键错误：账本/分类ID不存在");
@@ -92,16 +114,133 @@ class BillModule {
                 console.error("❌ 插入账单失败：", err.message);
             }
             throw new HttpError(`创建账单失败：${err.message}`, 500);
+
+        } finally {
+            // 释放连接
+            connection.release();
         }
     }
 
+    /**
+     * 核心方法：动态置顶指定分类（每次置顶都让目标分类成为新第一，原有第一顺延）
+     * @param userId 用户ID
+     * @param bookId 账本ID
+     * @param categoryId 分类ID
+     * @param type 账单类型（1=收入，2=支出）
+     * @param connection 事务连接
+     */
+    private async updateCategorySortToTop(
+        userId: number,
+        bookId: number,
+        categoryId: number,
+        type: number,
+        connection: any
+    ) {
+        try {
+            // 步骤1：查询当前维度下所有有效分类（含未加入排序表的）
+            const [allCategoryIds] = await connection.execute(
+                `SELECT id FROM ${this.categoryTableName}
+                 WHERE type = ? AND is_deleted = 0 AND is_active = 1`,
+                [type]
+            );
+            const validCategoryIds = (allCategoryIds as any[]).map(item => item.id);
+            if (!validCategoryIds.includes(categoryId)) {
+                console.warn(`分类${categoryId}无效/已删除，跳过排序更新`);
+                return;
+            }
+
+            // 步骤2：查询当前自定义排序表中的记录（仅当前维度）
+            const [sortList] = await connection.execute(
+                `SELECT category_id, sort_order 
+             FROM ${this.categoryUserSortTableName}
+             WHERE user_id = ? AND book_id = ? 
+               AND category_id IN (${validCategoryIds.map(() => "?").join(",")})
+             ORDER BY sort_order ASC`,
+                [userId, bookId, ...validCategoryIds]
+            );
+            const sortRecords = sortList as Array<{ category_id: number; sort_order: number }>;
+
+            // 步骤3：判断目标分类是否已在排序表中
+            const targetRecord = sortRecords.find(item => item.category_id === categoryId);
+
+            // 步骤4：核心逻辑 - 动态调整排序（让目标分类成为新第一）
+            if (!targetRecord) {
+                // 场景1：目标分类未加入排序表 → 插入为1，原有所有分类+1
+                // 先将原有分类排序值+1（腾出第一的位置）
+                if (sortRecords.length > 0) {
+                    await connection.execute(
+                        `UPDATE ${this.categoryUserSortTableName}
+                         SET sort_order = sort_order + 1, version = version + 1, updated_at = NOW()
+                         WHERE user_id = ? AND book_id = ?
+                           AND category_id IN (${sortRecords.map(() => "?").join(",")})`,
+                        [userId, bookId, ...sortRecords.map(item => item.category_id)]
+                    );
+                }
+                // 插入目标分类为1
+                await connection.execute(
+                    `INSERT INTO ${this.categoryUserSortTableName}
+                     (user_id, book_id, category_id, sort_order, version, created_at, updated_at)
+                     VALUES (?, ?, ?, 1, 1, NOW(), NOW())
+                         ON DUPLICATE KEY UPDATE
+                                              sort_order = 1,
+                                              updated_at = NOW(),
+                                              version = version + 1`,
+                    [userId, bookId, categoryId]
+                );
+            } else {
+                // 场景2：目标分类已在排序表中
+                if (targetRecord.sort_order === 1) {
+                    console.log(`分类${categoryId}已在第一，无需更新`);
+                    return; // 已在第一，直接返回，避免无意义操作
+                }
+                // 场景2.1：目标分类不在第一 → 调整排序让其成为新第一
+                // 步骤1：提取所有分类（含目标），按当前排序升序
+                const allSortRecords = [...sortRecords];
+                // 步骤2：移除目标分类，剩余分类按原排序重新分配（从2开始）
+                const remainingRecords = allSortRecords.filter(item => item.category_id !== categoryId);
+                if (remainingRecords.length > 0) {
+                    let caseSql = "CASE category_id ";
+                    // @ts-ignore
+                    let params = [];
+                    remainingRecords.forEach((item, i) => {
+                        caseSql += `WHEN ? THEN ? `;
+                        params.push(item.category_id, i + 2); // 剩余分类从2开始递增
+                    });
+                    caseSql += "END";
+                    // 批量更新剩余分类
+                    await connection.execute(
+                        `UPDATE ${this.categoryUserSortTableName}
+                         SET sort_order = ${caseSql}, version = version + 1, updated_at = NOW()
+                         WHERE user_id = ? AND book_id = ?
+                           AND category_id IN (${remainingRecords.map(() => "?").join(",")})`,
+                        // @ts-ignore
+                        [...params, userId, bookId, ...remainingRecords.map(item => item.category_id)]
+                    );
+                }
+                // 步骤3：将目标分类设为1（新第一）
+                await connection.execute(
+                    `UPDATE ${this.categoryUserSortTableName}
+                     SET sort_order = 1, version = version + 1, updated_at = NOW()
+                     WHERE user_id = ? AND book_id = ? AND category_id = ?`,
+                    [userId, bookId, categoryId]
+                );
+            }
+
+            console.log(`分类${categoryId}已动态置顶为新第一，原有分类顺延`);
+
+        } catch (error) {
+            console.error("❌ 更新分类排序失败：", (error as Error).message);
+            throw error; // 事务回滚
+        }
+    }
     // ========== 核心新增：新增账单后更新预算实际支出 ==========
     /**
      * 新增支出账单后，更新对应预算/分类预算的实际支出
      * @param billData 新增的账单数据
      */
-    private async updateBudgetActualAmountAfterBillCreate(billData: any) {
+    private async updateBudgetActualAmountAfterBillCreate(billData: any,connection:any) {
         try {
+            const exec = connection ? connection.execute : pool.execute;
             // 1. 解析账单时间，匹配所属周期的主预算
             const billTime = dayjs(billData.bill_time);
             const budget = await this.getBudgetByBillTime(
@@ -149,7 +288,7 @@ class BillModule {
                 billData.category_id
             );
             // 5. 更新分类预算表的实际支出
-            const [rows] = await pool.execute(
+            const [rows] = await exec(
                 `SELECT *
                  FROM ${this.budgetCategoryTableName}
                  WHERE budget_id = ?
@@ -172,7 +311,7 @@ class BillModule {
                 categoryRemainingPercent = 0;
             }
             console.log(categoryRemainingPercent);
-            await pool.execute(
+            await exec(
                 `UPDATE ${this.budgetCategoryTableName}
                  SET category_actual_amount = ?,
                      remaining_percent      = ?,

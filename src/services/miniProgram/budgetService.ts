@@ -48,3 +48,23 @@ export const budgetInfoService = async (
     });
   }
 };
+export const budgetRemoveService = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        // @ts-ignore
+        const { userId, bookId,budgetId } = req.body;
+        let result = await budgetModule.remove(userId, bookId,budgetId);
+
+        return res.status(200).json(result);
+    } catch (err) {
+        // @ts-ignore
+        res.status(err.status).json({
+            // @ts-ignore
+            code: err.status,
+            // @ts-ignore
+            message: err.message,
+        });
+    }
+};

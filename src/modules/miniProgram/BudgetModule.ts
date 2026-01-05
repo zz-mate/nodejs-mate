@@ -5,14 +5,15 @@ import type {BudgetDbSchema, UserDbSchema} from "../../types";
 import CategoryModule from "./CategoryModule";
 // @ts-ignore
 import {getWeekOfYear} from "../../utils/dateUtils";
-import  {formatDate} from '../../utils/date'
+import {formatDate} from '../../utils/date'
+
 type CycleType = "day" | "week" | "month" | "year" | "custom";
 
 class BillModule {
     budgetTableName = "mate_budget";
     billTableName = "mate_bill";
     budgetCategoryTableName = "mate_budget_category";
-
+    categoryTableName = "mate_category";
     /**
      * 按 cycle_type 判断预算是否唯一
      * @returns boolean：true=唯一，false=重复
@@ -142,15 +143,15 @@ class BillModule {
         try {
             // 查询支出总金额（核心修复：日期范围逻辑 + 金额类型强转 + 参数化type/is_deleted）
             const [rows] = await pool.execute(
-                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
-             FROM ${this.billTableName}
-             WHERE user_id = ?
-               AND book_id = ?
-               AND type = ? -- 参数化，避免类型不匹配
-               AND is_deleted = ? -- 参数化，避免类型不匹配
-               -- 修复：替换 BETWEEN，用 >= + < 结束日+1天，覆盖结束日全天数据
-               AND bill_time >= ?  
-               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10, 2))), 0) AS total_expense
+                 FROM ${this.billTableName}
+                 WHERE user_id = ?
+                   AND book_id = ?
+                   AND type = ?       -- 参数化，避免类型不匹配
+                   AND is_deleted = ? -- 参数化，避免类型不匹配
+                   -- 修复：替换 BETWEEN，用 >= + < 结束日+1天，覆盖结束日全天数据
+                   AND bill_time >= ?
+                   AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
                 [
                     userId,
                     bookId,
@@ -324,7 +325,9 @@ class BillModule {
                 // 数据库校验：检查分类ID是否存在于mate_category表
                 try {
                     const [categoryExist] = await pool.execute(
-                        `SELECT id FROM mate_category WHERE id = ? LIMIT 1`,
+                        `SELECT id
+                         FROM mate_category
+                         WHERE id = ? LIMIT 1`,
                         [categoryId] // 增加用户维度校验，避免跨用户分类
                     );
                     if ((categoryExist as any).length === 0) {
@@ -363,15 +366,17 @@ class BillModule {
                     // 4.3 批量UPSERT分类预算（仅处理合法分类）
                     const [categoryResult] = await pool.execute(
                         `INSERT INTO ${this.budgetCategoryTableName}
-                         (user_id, book_id, budget_id, category_id, category_name, category_amount, sort_order, is_active,
+                         (user_id, book_id, budget_id, category_id, category_name, category_amount, sort_order,
+                          is_active,
                           created_at, updated_at)
-                         VALUES ${categoryParams.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",")}
-                             ON DUPLICATE KEY UPDATE
-                                                  category_name = VALUES(category_name),
-                                                  category_amount = VALUES(category_amount),
-                                                  sort_order = VALUES(sort_order),
-                                                  is_active = VALUES(is_active),
-                                                  updated_at = VALUES(updated_at)`,
+                         VALUES ${categoryParams.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",")} ON DUPLICATE KEY
+                        UPDATE
+                            category_name =
+                        VALUES (category_name), category_amount =
+                        VALUES (category_amount), sort_order =
+                        VALUES (sort_order), is_active =
+                        VALUES (is_active), updated_at =
+                        VALUES (updated_at)`,
                         categoryParams.flat()
                     );
                     categoryCount = (categoryResult as any).affectedRows;
@@ -483,10 +488,10 @@ class BillModule {
                             // 批量更新对应分类预算的is_deleted为0
                             const [deleteUpdateResult] = await pool.execute(
                                 `UPDATE ${this.budgetCategoryTableName}
-                             SET is_deleted = 0,
-                                 updated_at = NOW()
-                             WHERE budget_id = ?
-                               AND category_id IN (${validCategoryIds.map(() => '?').join(',')})`,
+                                 SET is_deleted = 0,
+                                     updated_at = NOW()
+                                 WHERE budget_id = ?
+                                   AND category_id IN (${validCategoryIds.map(() => '?').join(',')})`,
                                 [budgetId, ...validCategoryIds] // 参数：预算ID + 所有有效分类ID
                             );
                             const deleteAffectedRows = (deleteUpdateResult as any).affectedRows;
@@ -538,6 +543,7 @@ class BillModule {
             message: message,
         };
     }
+
     /**
      * 计算指定周期内特定分类的支出总金额
      * @param user_id 用户ID
@@ -566,16 +572,16 @@ class BillModule {
         try {
             // 核心：不拼接时间，直接用日期 + >= / < 逻辑
             const [rows] = await pool.execute(
-                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
-             FROM ${this.billTableName}
-             WHERE user_id = ?
-               AND book_id = ?
-               AND type = ?        -- 用参数避免类型不匹配
-               AND is_deleted = ?  -- 用参数避免类型不匹配
-               AND category_id = ?
-               -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
-               AND bill_time >= ?  
-               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10, 2))), 0) AS total_expense
+                 FROM ${this.billTableName}
+                 WHERE user_id = ?
+                   AND book_id = ?
+                   AND type = ?       -- 用参数避免类型不匹配
+                   AND is_deleted = ? -- 用参数避免类型不匹配
+                   AND category_id = ?
+                   -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
+                   AND bill_time >= ?
+                   AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
                 [
                     Number(user_id),
                     Number(book_id),
@@ -700,7 +706,7 @@ class BillModule {
         // console.log("已删除分类列表：", categoryDelList);
 
         // 提取已删除分类的ID数组（去重+校验）
-        const deletedCategoryIds:any = [];
+        const deletedCategoryIds: any = [];
         if (categoryDelList && Array.isArray(categoryDelList.list)) {
             // @ts-ignore
             categoryDelList.list.forEach(item => {
@@ -711,14 +717,33 @@ class BillModule {
             });
         }
         console.log("已删除分类ID数组：", JSON.stringify(deletedCategoryIds));
+        let targetDate = new Date()
+        const year = targetDate.getFullYear();
+        const month = targetDate.getMonth(); // 月份从0开始（0=1月，11=12月）
+
+        // 当月第一天 00:00:00
+        const cycleStart = new Date(year, month, 1);
+        // 下月第一天减1秒 = 当月最后一天 23:59:59
+        const cycleEnd = new Date(year, month + 1, 1);
+        cycleEnd.setSeconds(cycleEnd.getSeconds() - 1);
+
+        // 2. 格式化时间为MySQL兼容的字符串（YYYY-MM-DD HH:mm:ss）
+        // @ts-ignore
+        const formatTime = (date) => {
+            return date.toISOString().slice(0, 19).replace('T', ' ');
+        };
+        const startStr = formatTime(cycleStart);
+        const endStr = formatTime(cycleEnd);
 
         // 2. 查询基础预算信息
         const [budgetRows] = await pool.execute(
             `SELECT id, cycle_start, cycle_end, amount, cycle_type
-         FROM ${this.budgetTableName}
-         WHERE user_id = ?
-           AND book_id = ? LIMIT 1`,
-            [userId, bookId]
+             FROM ${this.budgetTableName}
+             WHERE user_id = ?
+               AND book_id = ?
+               AND cycle_start >= ?
+               AND cycle_end <= ? LIMIT 1`,
+            [userId, bookId, startStr, endStr] // 传参避免SQL注入
         );
         const budgetInfo = (budgetRows as any[])[0];
         if (!budgetInfo) {
@@ -737,7 +762,7 @@ class BillModule {
 
         // @ts-ignore
         let budgetId = budgetInfo.id as number;
-        const { cycle_start, cycle_end, amount, cycle_type } = budgetInfo;
+        const {cycle_start, cycle_end, amount, cycle_type} = budgetInfo;
 
         try {
             if (!budgetId || budgetId <= 0) {
@@ -753,18 +778,18 @@ class BillModule {
                 try {
                     await pool.execute(
                         `UPDATE ${this.budgetCategoryTableName}
-                     SET category_amount = 0,
-                         category_actual_amount = 0,
-                         remaining_percent = 0,
-                         updated_at = NOW()
-                     WHERE budget_id = ?
-                       AND user_id = ?
-                       AND category_id IN (${deletedCategoryIds.map(() => '?').join(',')})`,
+                         SET category_amount        = 0,
+                             category_actual_amount = 0,
+                             remaining_percent      = 0,
+                             updated_at             = NOW()
+                         WHERE budget_id = ?
+                           AND user_id = ?
+                           AND category_id IN (${deletedCategoryIds.map(() => '?').join(',')})`,
                         [budgetId, userId, ...deletedCategoryIds]
                     );
                     console.log(`已清空预算ID ${budgetId} 下已删除分类(${deletedCategoryIds.join(',')})的预算金额`);
                 } catch (error: any) {
-                    console.error(`清空已删除分类预算失败：${error.message}`, { budgetId, deletedCategoryIds });
+                    console.error(`清空已删除分类预算失败：${error.message}`, {budgetId, deletedCategoryIds});
                     // 非致命错误，不中断流程
                 }
             }
@@ -782,15 +807,15 @@ class BillModule {
             //     [userId, bookId, cycle_start, cycle_end]
             // );
             const [billRows] = await pool.execute(
-                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10,2))), 0) AS total_expense
-             FROM ${this.billTableName}
-             WHERE user_id = ?
-               AND book_id = ?
-               AND type = ?        -- 用参数避免类型不匹配
-               AND is_deleted = ?  -- 用参数避免类型不匹配
-               -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
-               AND bill_time >= ?  
-               AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
+                `SELECT IFNULL(SUM(CAST(amount AS DECIMAL(10, 2))), 0) AS total_expense
+                 FROM ${this.billTableName}
+                 WHERE user_id = ?
+                   AND book_id = ?
+                   AND type = ?       -- 用参数避免类型不匹配
+                   AND is_deleted = ? -- 用参数避免类型不匹配
+                   -- 关键：覆盖开始日全天 + 结束日全天，无精度问题
+                   AND bill_time >= ?
+                   AND bill_time < DATE_ADD(?, INTERVAL 1 DAY)`,
                 [
                     Number(userId),
                     Number(bookId),
@@ -803,41 +828,42 @@ class BillModule {
             // // 计算实际使用金额（保留2位小数）
             console.log("【调试】SQL结果：", billRows as any[]);
             const actualAmount = parseFloat((billRows as any[])[0].total_expense || 0).toFixed(2);
-            console.log(actualAmount,"主预算表消费金额")
+            console.log(actualAmount, "主预算表消费金额")
             //
             // // 4. 更新预算表中的actual_amount字段
             await pool.execute(
                 `UPDATE ${this.budgetTableName}
-             SET actual_amount = ?,
-                 remaining_percent = ROUND((1 - (? / IF(amount = 0, 1, amount))) * 100, 2)
-             WHERE id = ? AND user_id = ?`,
+                 SET actual_amount     = ?,
+                     remaining_percent = ROUND((1 - (? / IF(amount = 0, 1, amount))) * 100, 2)
+                 WHERE id = ?
+                   AND user_id = ?`,
                 [actualAmount, actualAmount, budgetId, userId]
             );
 
             // 5. 查询预算详情（关联账本，格式化日期）
             const [rows] = await pool.execute(
                 `SELECT
-             -- 预算核心字段
-             b.id,
-             b.user_id,
-             b.book_id,
-             b.amount,
-             b.actual_amount,
-             b.remaining_percent,
-             b.cycle_start,
-             b.cycle_end,
-             b.cycle_type,
-             -- 日期格式化：UTC→东八区
-             DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
-             DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
-             -- 关联账本信息
-             bo.name AS book_name,
-             bo.is_default AS book_is_default
-         FROM mate_budget b
-                  LEFT JOIN mate_book bo ON b.book_id = bo.id
-         WHERE b.id = ?
-           AND b.user_id = ?
-           AND b.amount > 0 LIMIT 1`,
+                     -- 预算核心字段
+                     b.id,
+                     b.user_id,
+                     b.book_id,
+                     b.amount,
+                     b.actual_amount,
+                     b.remaining_percent,
+                     b.cycle_start,
+                     b.cycle_end,
+                     b.cycle_type,
+                     -- 日期格式化：UTC→东八区
+                     DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS created_at,
+                     DATE_FORMAT(CONVERT_TZ(b.updated_at, '+00:00', '+08:00'), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                     -- 关联账本信息
+                     bo.name                                                                        AS book_name,
+                     bo.is_default                                                                  AS book_is_default
+                 FROM mate_budget b
+                          LEFT JOIN mate_book bo ON b.book_id = bo.id
+                 WHERE b.id = ?
+                   AND b.user_id = ?
+                   AND b.amount > 0 LIMIT 1`,
                 [budgetId, userId]
             );
 
@@ -973,7 +999,7 @@ class BillModule {
                 message: "查询预算详情成功",
             };
         } catch (error: any) {
-            console.error("查询预算详情失败：", error.message, { userId, budgetId, bookId });
+            console.error("查询预算详情失败：", error.message, {userId, budgetId, bookId});
             // 异常返回
             return {
                 code: 500,
@@ -982,6 +1008,7 @@ class BillModule {
             };
         }
     }
+
     //
     async getBudgetCategoryList(
         userId: number,
@@ -991,42 +1018,47 @@ class BillModule {
         try {
 
             const [budgetRow] = await pool.execute(
-                `SELECT
-                     DATE_FORMAT(b.cycle_start, '%Y-%m-%d') AS cycleStart,
-                     DATE_FORMAT(b.cycle_end, '%Y-%m-%d') AS cycleEnd
+                `SELECT DATE_FORMAT(b.cycle_start, '%Y-%m-%d') AS cycleStart,
+                        DATE_FORMAT(b.cycle_end, '%Y-%m-%d')   AS cycleEnd
                  FROM ${this.budgetTableName} b
-                 WHERE b.id = ?
-                     LIMIT 1`,
+                 WHERE b.id = ? LIMIT 1`,
                 [budgetId]
             );
-          let   budgetInfo =   (budgetRow as any[])[0];
-          console.log(budgetInfo)
+            let budgetInfo = (budgetRow as any[])[0];
+            console.log(budgetInfo)
             // 构建格式化后的SQL语句（新增剩余金额字段）
             let querySql = `
-                SELECT id,
-                       user_id,
-                       book_id,
-                       budget_id,
-                       -- 剩余百分比：正数 + 强制两位小数（补零），返回字符串格式（前端展示友好）
-                       FORMAT(ROUND((IFNULL(remaining_percent, 0)), 2), 2)             AS remaining_percent,
-                       -- 新增：剩余金额 = 预算金额 - 实际支出金额（非负处理，空值默认0）
-                       IFNULL(ROUND((category_amount - category_actual_amount), 2), 0) AS remaining_amount,
-                       -- 日期格式化
-                       DATE_FORMAT(IFNULL(created_at, ''), '%Y-%m-%d %H:%i:%s')        AS created_at,
-                       DATE_FORMAT(IFNULL(updated_at, ''), '%Y-%m-%d %H:%i:%s')        AS updated_at,
-                       -- 基础业务字段
-                       category_id,
-                       category_name,
-                       category_amount,
-                       category_actual_amount,
-                       sort_order,
-                       is_active
-                FROM ${this.budgetCategoryTableName}
-                WHERE user_id = ?
-                  AND book_id = ?
-                  AND budget_id = ?
-                  AND is_deleted = 0
-                  AND category_amount > 0
+                SELECT
+                    bc.id,
+                    bc.user_id,
+                    bc.book_id,
+                    bc.budget_id,
+                    -- 剩余百分比：正数 + 强制两位小数（补零），返回字符串格式（前端展示友好）
+                    FORMAT(ROUND((IFNULL(bc.remaining_percent, 0)), 2), 2) AS remaining_percent,
+                    -- 剩余金额 = 预算金额 - 实际支出金额（非负处理，空值默认0）
+                    IFNULL(ROUND((bc.category_amount - bc.category_actual_amount), 2), 0) AS remaining_amount,
+                    -- 日期格式化
+                    DATE_FORMAT(IFNULL(bc.created_at, ''), '%Y-%m-%d %H:%i:%s') AS created_at,
+                    DATE_FORMAT(IFNULL(bc.updated_at, ''), '%Y-%m-%d %H:%i:%s') AS updated_at,
+                    -- 基础业务字段
+                    bc.category_id,
+                    bc.category_name,
+                    -- 新增：分类图标（关联分类表，空值返回空字符串）
+                    IFNULL(c.icon, '') AS category_icon,
+                    bc.category_amount,
+                    bc.category_actual_amount,
+                    bc.sort_order,
+                    bc.is_active
+                FROM ${this.budgetCategoryTableName} bc
+                         -- 左关联分类表：保证即使分类表无匹配数据，预算分类数据仍能返回
+                         LEFT JOIN ${this.categoryTableName} c
+                                   ON bc.category_id = c.id
+                WHERE
+                    bc.user_id = ?
+                  AND bc.book_id = ?
+                  AND bc.budget_id = ?
+                  AND bc.is_deleted = 0
+                  AND bc.category_amount > 0
             `;
             let queryParams = [userId, bookId, budgetId];
 
@@ -1043,22 +1075,22 @@ class BillModule {
                         Number(userId),
                         Number(bookId),
                         (budgetInfo.cycleStart),
-                (budgetInfo.cycleEnd),
+                        (budgetInfo.cycleEnd),
                         categoryId
                     );
 
                 // 更新分类实际支出
                 await pool.execute(
                     `UPDATE ${this.budgetCategoryTableName}
-                             SET category_actual_amount = ?,
-                                 remaining_percent      = IF(
-                                         category_amount = 0,
-                                         0,
-                                         ROUND(((category_amount - ?) / category_amount) * 100, 2)
-                                                          ),
-                                 updated_at             = NOW()
-                             WHERE budget_id = ?
-                               AND category_id = ?`,
+                     SET category_actual_amount = ?,
+                         remaining_percent      = IF(
+                                 category_amount = 0,
+                                 0,
+                                 ROUND(((category_amount - ?) / category_amount) * 100, 2)
+                                                  ),
+                         updated_at             = NOW()
+                     WHERE budget_id = ?
+                       AND category_id = ?`,
                     [categoryActualAmount, categoryActualAmount, budgetId, categoryId]
                 );
                 console.log(
@@ -1075,6 +1107,61 @@ class BillModule {
             return [];
         }
     }
+
+
+/**
+ * 删除预算（基于SQL连接池执行）
+ * @param userId - 用户ID
+ * @param bookId - 书籍ID
+ * @param budgetId - 预算ID
+ * @returns Promise<{ success: boolean; message: string; affectedRows?: number }>
+ */
+async  remove(userId: number, bookId: number, budgetId: number) {
+    // 1. 基础参数校验
+    if (!userId || !bookId || !budgetId) {
+        return {
+            success: false,
+            message: '用户ID、账本ID、预算ID不能为空',
+        };
+    }
+
+    try {
+        // 2. 执行SQL删除（带条件校验，避免误删其他用户数据）
+        // 核心：WHERE 条件同时校验三个ID，保证数据安全
+        const deleteSql = `
+      DELETE FROM ${this.budgetTableName} 
+      WHERE id = ? 
+      AND user_id = ? 
+      AND book_id = ?
+    `;
+        // 参数绑定（防止SQL注入，必须用数组传参）
+        const [result] = await pool.execute(deleteSql, [budgetId, userId, bookId]);
+
+        // 3. 解析执行结果（mysql2执行结果包含affectedRows）
+        const affectedRows = (result as any).affectedRows;
+        if (affectedRows > 0) {
+            return {
+                success: true,
+                message: '预算删除成功',
+                affectedRows,
+            };
+        } else {
+            return {
+                success: false,
+                message: '删除失败：未找到匹配的预算记录（或无权限删除）',
+                affectedRows: 0,
+            };
+        }
+
+    } catch (error) {
+        // 4. 异常处理（数据库连接错误、SQL语法错误等）
+        console.error('删除预算SQL执行失败：', error);
+        return {
+            success: false,
+            message: `删除失败：${(error as Error).message || '数据库异常'}`,
+        };
+    }
+}
 }
 
 export default new BillModule();

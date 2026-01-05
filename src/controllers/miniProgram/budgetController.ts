@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import {
   createBudgetService,
-  budgetInfoService,
+  budgetInfoService,budgetRemoveService
 } from "../../services/miniProgram/budgetService";
 import type { BudgetDbSchema } from "../../types";
 interface BudgetRequest extends Request, BudgetDbSchema {}
@@ -21,4 +21,12 @@ export const create = async (req: BudgetRequest, res: Response) => {
  */
 export const info = async (req: Request, res: Response) => {
   await budgetInfoService(req, res);
+};
+/**
+ * 删除预算
+ * @param req
+ * @param res
+ */
+export const remove = async (req: Request, res: Response) => {
+    await budgetRemoveService(req, res);
 };

@@ -91,3 +91,20 @@ export const categoryBillListService = async (req: Request, res: Response) => {
         });
     }
 };
+
+export const categorySortService = async (req: Request, res: Response) => {
+    try {
+        const { userId,bookId,categoryId,sortOrder} = req.body;
+        return await categoryModule.categorySort(
+            userId,bookId,categoryId,sortOrder
+        );
+    } catch (err) {
+        // @ts-ignore
+        res.status(err.status).json({
+            // @ts-ignore
+            code: err.status,
+            // @ts-ignore
+            message: err.message,
+        });
+    }
+};
