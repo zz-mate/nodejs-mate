@@ -7,13 +7,8 @@ export const compensationNewUserRegExp = async (
 ) => {
   try {
     // @ts-ignore
-    let { userId } = req.body;
-    let result = await userModule.updateUserExp(
-      userId,
-      5,
-      "新用户注册补偿",
-      userId
-    );
+    let { userId,expNum,behavior } = req.body;
+    let result = await userModule.updateUserExp(userId,expNum,behavior,userId);
     res.json(result);
   } catch (error) {
     res.status(403).json({ code: 403, message: "" });

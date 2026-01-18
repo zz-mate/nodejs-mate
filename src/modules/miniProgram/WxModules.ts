@@ -152,6 +152,7 @@ class WxModule {
           name: "日常账本",
           book_category_id: 1,
           type: 1,
+            icon:"http://oss-api-dev.zz-mate.cn/uploads/2026/01/1767868368950-6ca4cc5a-f8c8-48ea-9973-2369cad87568.png",
           currency: "CNY",
           description: "",
           is_default: 1,
@@ -162,15 +163,16 @@ class WxModule {
         };
         const [bookResult] = await connection.execute(
           `INSERT INTO ${this.bookTableName}
-                     (uuid, user_id, name, book_category_id, type, currency, description, is_default, is_active, created_at, updated_at,
+                     (uuid, user_id, name, book_category_id, type,icon, currency, description, is_default, is_active, created_at, updated_at,
                       deleted_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     VALUES (?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             defaultBookData.uuid,
             defaultBookData.user_id,
             defaultBookData.name,
             defaultBookData.book_category_id,
             defaultBookData.type,
+              defaultBookData.icon,
             defaultBookData.currency,
             defaultBookData.description,
             defaultBookData.is_default,

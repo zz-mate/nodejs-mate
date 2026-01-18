@@ -37,7 +37,7 @@ export const createBillService = async function (
         category_id: "分类ID",
       }
     );
-    const { user_id, book_id, category_id } = req.body;
+    const { user_id,billId, book_id, category_id } = req.body;
     // 2. 校验用户是否存在
     let existingUser = await userModule.findById(user_id);
     //  2-1. 用户不存在抛出异常

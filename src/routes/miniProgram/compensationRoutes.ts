@@ -5,6 +5,6 @@ import {compensationNewUserRegExp} from '../../controllers/miniProgram/compensat
 const router: Router = Router();
 
 
-router.post('/compensationNewUserRegExp/exp5', compensationNewUserRegExp);              // 获取列表
+router.post('/compensationNewUserRegExp/exp', compensationNewUserRegExp);              // 获取列表
 
 export default router;

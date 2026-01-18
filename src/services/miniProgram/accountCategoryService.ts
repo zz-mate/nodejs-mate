@@ -35,6 +35,6 @@ export const accountIndexCategoryListService = async (
   req: Request,
   res: Response
 ) => {
-  const { parentId } = req.body;
-  return await accountCategoryModule.accountIndexCategoryList(parentId);
+  const { parentId,isLetterGroup } = req.body;
+  return await accountCategoryModule.accountIndexCategoryList(parentId,isLetterGroup);
 };

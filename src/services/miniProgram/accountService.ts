@@ -2,9 +2,7 @@ import type { Request, Response } from "express";
 import accountModule from "../../modules/miniProgram/AccountModule";
 
 export const accountCreateService = async (data: any) => {
-  // @ts-ignore
-  const { userId } = data;
-  let result = await accountModule.create(userId);
+  let result = await accountModule.create(data );
   return result;
 };
 export const accountListService = async (req: Request, res: Response) => {
@@ -21,4 +19,9 @@ export const accountListService = async (req: Request, res: Response) => {
       message: err.message,
     });
   }
+};
+
+export const accountUpdateService = async (data: any) => {
+    let result = await accountModule.update(data );
+    return result;
 };

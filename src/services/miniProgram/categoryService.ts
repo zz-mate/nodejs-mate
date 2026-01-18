@@ -1,11 +1,21 @@
 import type { Request, Response } from "express";
 import categoryModule from "../../modules/miniProgram/CategoryModule";
 
-export const categoryCreateService = async (data: any) => {
+export const categoryCreateService = async (req: Request, res: Response) => {
   // @ts-ignore
-  const { userId } = data;
-  let result = await categoryModule.create(userId);
-  return result;
+  const { userId,bookCategoryId,icon,name ,type} = req.body;
+try {
+    let result = await categoryModule.create(userId,bookCategoryId,icon,name ,type);
+    return result;
+}catch (err) {
+    // @ts-ignore
+    res.status(err.status).json({
+        // @ts-ignore
+        code: err.status,
+        // @ts-ignore
+        message: err.message,
+    });
+}
 };
 export const categoryListService = async (req: Request, res: Response) => {
   try {
@@ -19,7 +29,9 @@ export const categoryListService = async (req: Request, res: Response) => {
       bookCategoryId
     );
   } catch (err) {
+      console.log(err,12)
     // @ts-ignore
+
     res.status(err.status).json({
       // @ts-ignore
       code: err.status,
@@ -31,8 +43,8 @@ export const categoryListService = async (req: Request, res: Response) => {
 
 export const cateBindBillCategoryService = async (req: Request, res: Response) => {
   // @ts-ignore
-  const { categoryId,currentUserId } = req.body;
-  let result = await categoryModule.cateBindBill(categoryId,currentUserId);
+  const { categoryId,bookId,currentUserId } = req.body;
+  let result = await categoryModule.cateBindBill(categoryId,bookId,currentUserId);
   return result;
 };
 

@@ -15,6 +15,5 @@ export const userQrcodeService = (req: Request, res: Response) => {
 export const userUpdateService = (req: Request, res: Response) => {
   // @ts-ignore
   let { userId, userInfo, updateType } = req.body;
-  console.log(userId);
   return userModel.updateUser(userId, userInfo, updateType);
 };

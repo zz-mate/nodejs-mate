@@ -50,3 +50,17 @@ export function formatDate (dateValue: any, format: string = 'YYYY-MM-DD HH:mm:s
             return date.toISOString(); // 默认返回 ISO 格式
     }
 }
+
+
+/**
+ * 解析配置的时间字符串为定时规则（如 "09:00" → 每天9点）
+ * @param timeStr 时间字符串（HH:mm）
+ * @returns 定时规则对象
+ */
+export function parseTimeToScheduleRule(timeStr: string): { hour: number; minute: number } {
+    const [hour, minute] = timeStr.split(':').map(Number);
+    if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        throw new Error(`无效的时间格式：${timeStr}，请使用 HH:mm 格式（如 09:00）`);
+    }
+    return { hour, minute };
+}

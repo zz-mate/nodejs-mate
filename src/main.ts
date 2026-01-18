@@ -1,10 +1,33 @@
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import config from './config';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import logger, { httpLoggerMiddleware } from './middlewares/logger.middleware';
 
+import { initOSSClient } from './tools/oss';
+// 1. 加载环境变量
+dotenv.config();
+// 初始化订阅模块
+
+
+// 2. 初始化 OSS 客户端（pnpm 环境下无需修改）
+const getEnvVariable = (key: string): string => {
+    const value = process.env[key];
+    if (!value) {
+        throw new Error(`环境变量 ${key} 未配置，请检查 .env 文件`);
+    }
+    return value;
+};
+
+initOSSClient({
+    accessKeyId: getEnvVariable('OSS_ACCESS_KEY_ID'),
+    accessKeySecret: getEnvVariable('OSS_ACCESS_KEY_SECRET'),
+    bucket: getEnvVariable('OSS_BUCKET'),
+    region: getEnvVariable('OSS_REGION'),
+    // endpoint:getEnvVariable('OSS_ENDPOINT')
+});
 // 创建Express实例
 const app = express();
 
@@ -14,6 +37,7 @@ app.use(httpLoggerMiddleware);
 // 全局中间件
 app.use(cors());
 app.use(express.json());
+app.use(express.raw({ type: 'application/xml', limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // 🔥 优化1：启动日志改为纯文本，无对象

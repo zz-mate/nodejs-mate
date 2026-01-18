@@ -484,7 +484,7 @@ class PointModule {
     let checkSql = "";
     switch (bizType) {
       case "profile_bind_mobile":
-        checkSql = `SELECT mobile FROM ${this.userTableName} WHERE id = ? AND mobile IS NOT NULL AND mobile != '' LIMIT 1`;
+        checkSql = `SELECT phone FROM ${this.userTableName} WHERE id = ? AND phone IS NOT NULL AND phone != '' LIMIT 1`;
         break;
       case "profile_bind_email":
         checkSql = `SELECT email FROM ${this.userTableName} WHERE id = ? AND email IS NOT NULL AND email != '' LIMIT 1`;

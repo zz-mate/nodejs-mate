@@ -716,7 +716,7 @@ class BillModule {
                 }
             });
         }
-        console.log("已删除分类ID数组：", JSON.stringify(deletedCategoryIds));
+        // console.log("已删除分类ID数组：", JSON.stringify(deletedCategoryIds));
         let targetDate = new Date()
         const year = targetDate.getFullYear();
         const month = targetDate.getMonth(); // 月份从0开始（0=1月，11=12月）

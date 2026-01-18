@@ -8,6 +8,7 @@ export interface AccountCategoryDbSchema {
   user_id: number | null;
   parent_id: number;
   name: string;
+  remark?: string;
   type: 1 | 2 | 3 | 4;
   icon: string;
   color: string;
@@ -33,7 +34,7 @@ export interface CreateAccountCategoryParams {
 }
 
 export interface IndexedAccountCategory {
-  letter: string; // 首字母（如B、C、#等）
+  letter?: string; // 首字母（如B、C、#等）
   data: Array<{
     id: number;
     type: 1 | 2 | 3 | 4;
@@ -128,6 +129,7 @@ class AccountCategoryModule {
                         user_id,
                         parent_id,
                         name,
+                        remark,
                         icon,
                         color,
                         type,
@@ -152,7 +154,7 @@ class AccountCategoryModule {
             ? Number(item.user_id)
             : null,
         parent_id: Number(item.parent_id || 0),
-        name: item.name || "",
+        name: item.name || "", remark: item.remark || "",
         type: item.type,
         icon: item.icon || "",
         color: item.color || "#666666",
@@ -298,108 +300,107 @@ class AccountCategoryModule {
     console.log("传有效userId：", case5);
   }
 
-  /**
-   * 按首字母分组查询账户分类（仿城市索引）
-   * @param parentId 父分类ID（必填，过滤指定父分类下的子分类）
-   * @returns 首字母分组的分类列表（格式：[{letter: 'B', data: [{id, type, name}]}]）
-   */
-  async accountIndexCategoryList(
-    parentId: number
-  ): Promise<IndexedAccountCategory[]> {
-    try {
-      // 1. 参数校验：parentId 必须为有效数字
-      const validParentId =
-        Number.isFinite(parentId) && parentId >= 0 ? parentId : 0;
+    /**
+     * 按首字母分组查询账户分类（仿城市索引）
+     * @param parentId 父分类ID（必填，过滤指定父分类下的子分类）
+     * @param isLetterGroup 【新增】是否按首字母分组（默认：false，不分组）
+     * @returns 分类列表（分组模式：[{letter: 'B', data: [...]}, ...]；非分组模式：[{data: [...], letter: undefined}]）
+     */
+    async accountIndexCategoryList(
+        parentId: number,
+        isLetterGroup: boolean = false // 新增参数：默认不分组
+    ): Promise<IndexedAccountCategory[]> {
+        try {
+            // 1. 参数校验：parentId 必须为有效数字
+            const validParentId =
+                Number.isFinite(parentId) && parentId >= 0 ? parentId : 0;
 
-      // 2. 查询指定父分类下的所有启用分类（仅查核心字段）
-      const [categoryRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id, type, name
+            // 2. 查询指定父分类下的所有启用分类（仅查核心字段）
+            const [categoryRows] = await pool.execute<RowDataPacket[]>(
+                `SELECT id, type, name, icon, parent_id
                  FROM ${this.accountCategoryTableName}
                  WHERE parent_id = ?
                    AND is_active = 1
                    AND type IN (1, 2, 3, 4) -- 过滤非法type，避免约束错误
                  ORDER BY name ASC`,
-        [validParentId]
-      );
+                [validParentId]
+            );
 
-      // 3. 空结果处理
-      if (!Array.isArray(categoryRows) || categoryRows.length === 0) {
-        return [];
-      }
+            // 3. 空结果处理
+            if (!Array.isArray(categoryRows) || categoryRows.length === 0) {
+                return [];
+            }
 
-      // 4. 工具函数：获取字符串首字母（中文转拼音首字母，非字母归为#）
-      const getFirstLetter = (name: string): string => {
-        if (!name || name.trim() === "") return "#";
+            // 4. 格式化基础分类数据（统一处理，分组/非分组复用）
+            const formatCategoryItem = (item: RowDataPacket) => ({
+                id: Number(item.id || 0),
+                type: [1, 2, 3, 4].includes(item.type)
+                    ? (item.type as 1 | 2 | 3 | 4)
+                    : 2, // 兜底默认支出类
+                name: item.name || "",
+                icon: item.icon || "",
+                parentId: Number(item.parent_id || 0)
+            });
 
-        // 匹配中文拼音首字母（借助正则/拼音库，此处简化实现，可替换为pinyin库）
-        const firstChar = name.trim().charAt(0);
-        // 正则匹配字母（大小写）
-        const letterReg = /^[A-Za-z]$/;
-        if (letterReg.test(firstChar)) {
-          return firstChar.toUpperCase();
+            // 格式化所有分类数据
+            const formattedList = categoryRows.map(formatCategoryItem);
+
+            // 5. 非分组模式：直接返回单层结构（核心改造点）
+            if (!isLetterGroup) {
+                return [{
+                    letter: undefined, // 非分组模式隐藏字母字段
+                    data: formattedList
+                }];
+            }
+
+            // 6. 分组模式：按首字母分组（原有逻辑保留）
+            // 工具函数：获取字符串首字母（中文转拼音首字母，非字母归为#）
+            const getFirstLetter = (name: string): string => {
+                if (!name || name.trim() === "") return "#";
+
+                const firstChar = name.trim().charAt(0);
+                // 正则匹配字母（大小写）
+                const letterReg = /^[A-Za-z]$/;
+                if (letterReg.test(firstChar)) {
+                    return firstChar.toUpperCase();
+                }
+
+                // 使用pinyin库获取中文首字母（需安装：npm install pinyin）
+                const pinyinArr = pinyin(firstChar, {
+                    style: pinyin.STYLE_FIRST_LETTER,
+                });
+                const letter = pinyinArr[0][0]?.toUpperCase() || "#";
+
+                return letter;
+            };
+
+            // 按首字母分组
+            const groupedMap = new Map<string, IndexedAccountCategory["data"]>();
+            formattedList.forEach((item) => {
+                const letter = getFirstLetter(item.name);
+                if (!groupedMap.has(letter)) {
+                    groupedMap.set(letter, []);
+                }
+                groupedMap.get(letter)!.push(item);
+            });
+
+            // 转换为最终格式 + 按字母排序（A-Z，#放最后）
+            const result = Array.from(groupedMap.entries())
+                .map(([letter, data]) => ({ letter, data }))
+                .sort((a, b) => {
+                    // # 排最后，其他字母按A-Z排序
+                    if (a.letter === "#") return 1;
+                    if (b.letter === "#") return -1;
+                    return a.letter.localeCompare(b.letter);
+                });
+
+            return result;
+        } catch (error: any) {
+            console.error("按首字母查询分类失败：", error.message, error.stack);
+            // 异常兜底：返回空数组
+            return [];
         }
-
-        // 中文转拼音首字母（简化版，推荐安装 pinyin 库：npm install pinyin）
-        // ------------- 简化版（仅示例，生产建议用pinyin库）-------------
-        // const cnCharMap: Record<string, string> = {
-        //     北: 'B', 京: 'J', 银: 'Y', 行: 'H',
-        //     工: 'G', 商: 'S', 建: 'J', 农: 'N',
-        //     交:'J'
-        //     // 可扩展更多常用字映射，或用pinyin库自动转换
-        // };
-        // ------------- 推荐：使用pinyin库（需安装）-------------
-        // import pinyin from 'pinyin';
-        const pinyinArr = pinyin(firstChar, {
-          style: pinyin.STYLE_FIRST_LETTER,
-        });
-        const letter = pinyinArr[0][0]?.toUpperCase() || "#";
-
-        // const letter = cnCharMap[firstChar] || '#';
-        return letter.toUpperCase();
-      };
-
-      // 5. 按首字母分组
-      const groupedMap = new Map<string, IndexedAccountCategory["data"]>();
-
-      categoryRows.forEach((item) => {
-        // 格式化单条分类数据
-        const categoryItem = {
-          id: Number(item.id || 0),
-          type: [1, 2, 3, 4].includes(item.type)
-            ? (item.type as 1 | 2 | 3 | 4)
-            : 2, // 兜底默认支出类
-          name: item.name || "",
-        };
-
-        // 获取首字母
-        const letter = getFirstLetter(categoryItem.name);
-
-        // 分组填充
-        if (!groupedMap.has(letter)) {
-          groupedMap.set(letter, []);
-        }
-        // @ts-ignore
-        groupedMap.get(letter)!.push(categoryItem);
-      });
-
-      // 6. 转换为最终格式 + 按字母排序（A-Z，#放最后）
-      let result: IndexedAccountCategory[];
-      result = Array.from(groupedMap.entries())
-        .map(([letter, data]) => ({ letter, data }))
-        .sort((a, b) => {
-          // # 排最后，其他字母按A-Z排序
-          if (a.letter === "#") return 1;
-          if (b.letter === "#") return -1;
-          return a.letter.localeCompare(b.letter);
-        });
-
-      return result;
-    } catch (error: any) {
-      console.error("按首字母查询分类失败：", error.message, error.stack);
-      // 异常兜底：返回空数组
-      return [];
     }
-  }
 }
 
 export default new AccountCategoryModule();

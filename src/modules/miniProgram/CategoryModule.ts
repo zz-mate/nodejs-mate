@@ -1,7 +1,7 @@
 import pool from "../../db";
 import {OkPacket, RowDataPacket} from 'mysql2/promise'; // 引入类型定义
 import type {CategoryDbSchema} from "../../types";
-
+import HttpError from "../../utils/HttpError";
 class UserModule {
     categoryTableName = "mate_category";
     bookTableName = "mate_book";
@@ -33,160 +33,159 @@ class UserModule {
             const validPage = Math.max(Number(page) || 1, 1);
             const validPageSize = Math.max(Number(pageSize) || 10, 1);
             const offset = (validPage - 1) * validPageSize;
+            const validUserId = Number(userId) || 0;
+            const validBookCategoryId = Number(bookCategoryId) || 0;
 
-            // ========== 第一步：极简查询，先确保能查到数据 ==========
-            // 临时注释复杂条件，只查基础有效数据
-            const [tempRows] = await pool.execute(
-                `SELECT id, name, type, parent_id
-                 FROM ${this.categoryTableName}
-                 WHERE is_active = 1
-                   AND is_deleted = 0
-                   AND parent_id = 0 LIMIT ?, ?`,
-                [offset + '', validPageSize + ''] // 修复：移除多余的字符串拼接，直接传数字
-            );
-            // console.log("极简查询结果：", tempRows); // 这里必须有数据！
-
-            // ========== 第二步：如果极简查询有数据，再逐步加条件 ==========
+            // ========== 第一步：构建核心查询条件 ==========
             let whereConditions: string[] = [
                 "c.is_active = 1",
                 "c.is_deleted = 0",
-                "c.parent_id = 0",
+                "c.parent_id = 0", // 只查顶级分类
             ];
             let queryParams: any[] = [];
 
-            // 1. 处理 userId（简化逻辑，先不关联删除表）
-            const validUserId = Number(userId);
-            if (validUserId && validUserId > 0) {
+            // 1. 用户ID过滤：系统分类（user_id=null） + 当前用户自定义分类
+            if (validUserId > 0) {
                 whereConditions.push("(c.user_id = ? OR c.user_id IS NULL)");
                 queryParams.push(validUserId);
             } else {
-                whereConditions.push("c.user_id IS NULL");
+                whereConditions.push("c.user_id IS NULL"); // 无用户ID只查系统分类
             }
 
-            // 2. 处理 type 过滤
+            // 2. 类型过滤（1/2/3）
             const validType = Number(type);
             if ([1, 2, 3].includes(validType)) {
                 whereConditions.push("c.type = ?");
                 queryParams.push(validType);
             }
 
-            // 3. 处理 bookCategoryId：你的表中 book_id 全为 NULL，传值必空！
-            if (bookCategoryId) {
-                // 提示：你的表 book_id 都是 NULL，传这个参数会过滤空
-                console.warn(
-                    "警告：表中 book_id 全为 NULL，传 bookCategoryId 会无数据"
-                );
-                // whereConditions.push("c.book_id = ?");
-                // queryParams.push(bookCategoryId);
+            // 3. 账本分类ID过滤（核心：只过滤分类表的book_category_id）
+            if (validBookCategoryId > 0) {
+                whereConditions.push("c.book_category_id = ?");
+                queryParams.push(validBookCategoryId);
             }
 
-            // 4. 临时注释删除表关联（先确保基础查询有数据）
-            // 修复：增加 userId 非空判断，避免传入 0 导致的错误
-            if (validUserId && validUserId > 0) {
+            // 4. 排除用户删除的分类
+            if (validUserId > 0) {
                 whereConditions.push(
                     "c.id NOT IN (SELECT category_id FROM mate_category_user_delete WHERE user_id = ?)"
                 );
                 queryParams.push(validUserId);
             }
 
-            // ========== 统计总数（关联排序表，但不影响总数） ==========
+            // ========== 第二步：查询总数（排序表仅关联用户ID） ==========
             const [totalRows] = await pool.execute(
                 `SELECT COUNT(*) AS total
-                 FROM ${this.categoryTableName} c
-                          LEFT JOIN mate_category_user_sort s
-                                    ON c.id = s.category_id
-                                        AND s.user_id = ?
-                                        AND (s.book_id = ? OR s.book_id IS NULL)
-                 WHERE ${whereConditions.join(" AND ")}`,
-                // 总数查询的排序表参数：userId、bookCategoryId
-                [validUserId || null, bookCategoryId || null, ...queryParams]
+             FROM ${this.categoryTableName} c
+             LEFT JOIN mate_category_user_sort s
+               ON c.id = s.category_id
+               AND s.user_id = ?  -- 排序表仅关联用户ID（无book_category_id）
+             WHERE ${whereConditions.join(" AND ")}`,
+                [
+                    validUserId || null,       // 排序表-仅传用户ID
+                    ...queryParams             // 基础查询条件参数
+                ]
             );
             const total = Number((totalRows as any[])[0]?.total || 0);
             const totalPage = Math.ceil(total / validPageSize);
 
-            // ========== 查询顶级分类（核心：关联自定义排序表） ==========
+            // ========== 第三步：查询顶级分类列表（排序表仅关联用户ID） ==========
             const [topCategoryRows] = await pool.execute(
                 `SELECT c.id,
-                        c.user_id,
-                        c.book_id,
-                        c.parent_id,
-                        c.name,
-                        c.type,
-                        c.icon,
-                        c.color,
-                        c.sort_order                                   AS default_sort,
-                        IFNULL(s.sort_order, c.sort_order)             AS final_sort_order, -- 优先自定义排序
-                        c.is_system,
-                        c.is_active,
-                        DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-                        DATE_FORMAT(c.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-                 FROM ${this.categoryTableName} c
-                          LEFT JOIN mate_category_user_sort s
-                                    ON c.id = s.category_id
-                                        AND s.user_id = ?
-                                        AND (s.book_id = ? OR s.book_id IS NULL)
-                 WHERE ${whereConditions.join(" AND ")}
-                 ORDER BY final_sort_order ASC LIMIT ?, ?`, // 按最终排序值排序
-                // 参数顺序：排序表user_id、排序表book_id、查询条件参数、offset、pageSize
+                    c.user_id,
+                    c.book_category_id,  -- 返回账本分类ID字段
+                    c.parent_id,
+                    c.name,
+                    c.type,
+                    c.icon,
+                    c.color,
+                    c.sort_order AS default_sort,
+                    IFNULL(s.sort_order, c.sort_order) AS final_sort_order,
+                    c.is_system,
+                    c.is_active,
+                    DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                    DATE_FORMAT(c.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+             FROM ${this.categoryTableName} c
+             LEFT JOIN mate_category_user_sort s
+               ON c.id = s.category_id
+               AND s.user_id = ?  -- 排序表仅关联用户ID
+             WHERE ${whereConditions.join(" AND ")}
+             ORDER BY final_sort_order ASC 
+             LIMIT ?, ?`,
                 [
-                    validUserId || null,
-                    bookCategoryId || null,
-                    ...queryParams,
-                    offset.toString(),
-                    validPageSize.toString(),
+                    validUserId || null,       // 排序表-仅传用户ID
+                    ...queryParams,            // 基础查询条件参数
+                    String(offset),                    // 分页偏移量
+                    String(validPageSize)              // 分页大小
                 ]
             );
-            // console.log("带条件查询结果：", topCategoryRows);
 
-            // ========== 查询所有分类用于构建树形（关联自定义排序） ==========
+            // ========== 第四步：查询所有分类（用于构建树形结构） ==========
+            // 构建树形查询条件（和主查询一致）
+            let treeWhereConditions = [
+                "c.is_active = 1",
+                "c.is_deleted = 0"
+            ];
+            let treeQueryParams: any[] = [];
+
+            if (validUserId > 0) {
+                treeWhereConditions.push("(c.user_id = ? OR c.user_id IS NULL)");
+                treeQueryParams.push(validUserId);
+            } else {
+                treeWhereConditions.push("c.user_id IS NULL");
+            }
+
+            if (validBookCategoryId > 0) {
+                treeWhereConditions.push("c.book_category_id = ?");
+                treeQueryParams.push(validBookCategoryId);
+            }
+
             const [allCategoryRows] = await pool.execute(
                 `SELECT c.id,
                         c.user_id,
-                        c.book_id,
+                        c.book_category_id,
                         c.parent_id,
                         c.name,
                         c.type,
-                        c.sort_order                       AS default_sort,
+                        c.sort_order AS default_sort,
                         IFNULL(s.sort_order, c.sort_order) AS final_sort_order
                  FROM ${this.categoryTableName} c
                           LEFT JOIN mate_category_user_sort s
                                     ON c.id = s.category_id
-                                        AND s.user_id = ?
-                                        AND (s.book_id = ? OR s.book_id IS NULL)
-                 WHERE c.is_active = 1
-                   AND c.is_deleted = 0
-                   AND (c.user_id IS NULL ${validUserId && validUserId > 0 ? `OR c.user_id = ?` : ""})`,
-                // 参数：排序表user_id、排序表book_id、可选的user_id
-                validUserId && validUserId > 0
-                    ? [validUserId, bookCategoryId || null, validUserId]
-                    : [validUserId || null, bookCategoryId || null]
+                                        AND s.user_id = ?  -- 排序表仅关联用户ID
+                 WHERE ${treeWhereConditions.join(" AND ")}`,
+                [
+                    validUserId || null,       // 排序表-仅传用户ID
+                    ...treeQueryParams
+                ]
             );
 
-            // ========== 格式化 + 构建树形 ==========
+            // ========== 第五步：格式化数据 + 构建树形结构 ==========
             interface CategoryDbSchema {
                 id: number;
                 user_id: number | null;
-                book_id: number | null;
+                book_category_id: number | null; // 账本分类ID
                 parent_id: number;
                 name: string;
                 type: 1 | 2 | 3;
                 icon: string;
                 color: string;
+                default_sort: number;
+                final_sort_order: number;
                 sort_order: number; // 兼容原有字段
-                final_sort_order: number; // 新增：最终排序值
-                default_sort: number; // 新增：默认排序值
                 is_system: 0 | 1;
                 is_active: 0 | 1;
                 created_at: string;
                 updated_at: string;
                 children: CategoryDbSchema[];
-                status?: Boolean;
+                status?: boolean;
             }
 
+            // 格式化单个分类数据
             const formatCategory = (item: any): CategoryDbSchema => ({
                 id: Number(item.id || 0),
                 user_id: item.user_id !== null ? Number(item.user_id) : null,
-                book_id: item.book_id !== null ? Number(item.book_id) : null,
+                book_category_id: item.book_category_id !== null ? Number(item.book_category_id) : null,
                 parent_id: Number(item.parent_id || 0),
                 name: item.name || "",
                 type: [1, 2, 3].includes(Number(item.type))
@@ -194,17 +193,18 @@ class UserModule {
                     : 1,
                 icon: item.icon || "",
                 color: item.color || "#333333",
-                sort_order: Number(item.final_sort_order || item.sort_order || 0), // 兼容原有排序字段
-                final_sort_order: Number(item.final_sort_order || item.sort_order || 0),
                 default_sort: Number(item.default_sort || item.sort_order || 0),
+                final_sort_order: Number(item.final_sort_order || item.sort_order || 0),
+                sort_order: Number(item.final_sort_order || item.sort_order || 0), // 兼容原有排序
                 is_system: (item.is_system ? Number(item.is_system) : 0) as 0 | 1,
                 is_active: (item.is_active ? Number(item.is_active) : 0) as 0 | 1,
                 created_at: item.created_at || "",
                 updated_at: item.updated_at || "",
-                children: [] as CategoryDbSchema[],
-                status: true,
+                children: [],
+                status: true
             });
 
+            // 格式化所有分类数据
             const allCategories = Array.isArray(allCategoryRows)
                 ? (allCategoryRows as any[]).map(formatCategory)
                 : [];
@@ -212,44 +212,162 @@ class UserModule {
                 ? (topCategoryRows as any[]).map(formatCategory)
                 : [];
 
-            // 修复：树形子分类按 final_sort_order 排序
-            const buildTree = (
-                allCats: CategoryDbSchema[],
-                parentId: number
-            ): CategoryDbSchema[] => {
+            // 构建树形结构（子分类按最终排序值排序）
+            const buildTree = (allCats: CategoryDbSchema[], parentId: number): CategoryDbSchema[] => {
                 return allCats
-                    .filter((cat) => cat.parent_id === parentId)
-                    .sort((a, b) => a.final_sort_order - b.final_sort_order) // 子分类按最终排序
-                    .map((cat) => ({...cat, children: buildTree(allCats, cat.id)}));
+                    .filter(cat => cat.parent_id === parentId)
+                    .sort((a, b) => a.final_sort_order - b.final_sort_order)
+                    .map(cat => ({
+                        ...cat,
+                        children: buildTree(allCats, cat.id)
+                    }));
             };
 
-            // 顶级分类也按最终排序值排序
+            // 顶级分类按最终排序值排序，再构建树形
             const sortedTopCategories = topCategories.sort((a, b) => a.final_sort_order - b.final_sort_order);
-
-            const treeCategories = sortedTopCategories.map((topCat) => ({
+            const treeCategories = sortedTopCategories.map(topCat => ({
                 ...topCat,
-                children: buildTree(allCategories, topCat.id),
+                children: buildTree(allCategories, topCat.id)
             }));
 
+            // ========== 返回结果 ==========
             return {
                 list: treeCategories,
                 pagination: {
                     total,
                     page: validPage,
                     pageSize: validPageSize,
-                    totalPage,
-                },
+                    totalPage
+                }
             };
+
         } catch (error: any) {
-            console.error("查询失败：", error.message, error.stack);
+            console.error("分类列表查询失败：", error.message, error.stack);
             return {
                 list: [],
-                pagination: {total: 0, page: 1, pageSize: 10, totalPage: 0},
+                pagination: { total: 0, page: 1, pageSize: 10, totalPage: 0 }
             };
         }
     }
+    /**
+     * 创建分类（根据user_id保证name不重复）
+     * @param userId 用户ID（系统分类传0/null）
+     * @param icon 分类图标
+     * @param name 分类名称（核心：同user_id+type下唯一）
+     * @param type 分类类型（1=收入，2=支出，3=转账）
+     * @returns 创建结果
+     */
+    async create(userId: number,bookCategoryId:number, icon: string, name: string, type: number): Promise<any> {
+        // 1. 参数校验
+        if (!name || name.trim() === '') {
+            throw new HttpError('分类名称不能为空', 400);
+        }
+        if (![1, 2, 3].includes(type)) {
+            throw new HttpError('分类类型只能是1(收入)/2(支出)/3(转账)', 400);
+        }
+        const validUserId = userId > 0 ? userId : null; // 系统分类userId存null
+        const validBookId = bookCategoryId > 0 ? bookCategoryId : null; // 无账本则存null
 
-    async create(userId: number): Promise<any> {
+        // 2. 开启事务（防止并发创建重复分类）
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // 3. 唯一性校验：同user_id + 同bookCategoryId + 同type下name不能重复
+            // 若bookCategoryId为空，则按「user_id+type+name」唯一；否则按「user_id+bookId+type+name」唯一
+            const [existCategory] = await connection.execute(
+                `SELECT id FROM ${this.categoryTableName}
+                 WHERE name = ?
+                   AND type = ?
+                   AND is_deleted = 0
+                   AND (user_id = ? OR (user_id IS NULL AND ? IS NULL))
+                   AND (book_category_id = ? OR (book_category_id IS NULL AND ? IS NULL))`,
+                [
+                    name.trim(),
+                    type,
+                    validUserId,
+                    validUserId,
+                    validBookId,
+                    validBookId
+                ]
+            );
+
+            // 校验不通过：抛出重复错误
+            if ((existCategory as any[]).length > 0) {
+                const bookTip = validBookId ? `账本下` : '';
+                throw new HttpError(`当前用户${bookTip}已存在名为【${name}】的${type === 1 ? '收入' : type === 2 ? '支出' : '转账'}分类`, 409);
+            }
+
+            // 4. 构造分类数据（补充默认值，新增book_id字段）
+            const now = new Date();
+            const categoryData = {
+                user_id: validUserId,
+                book_category_id: validBookId, // 新增：关联账本分类ID
+                name: name.trim(),
+                type,
+                icon: icon || '', // 图标为空则存空字符串
+                color: '#333333', // 默认颜色
+                sort_order: 999, // 默认排序（后置）
+                is_system: 0, // 0=用户自定义，1=系统分类
+                is_active: 1, // 1=启用，0=禁用
+                is_deleted: 0, // 软删除标记
+                created_at: now,
+                updated_at: now,
+            };
+
+            // 5. 执行插入（新增book_id参数）
+            const [result] = await connection.execute(
+                `INSERT INTO ${this.categoryTableName}
+                 (user_id, book_category_id, name, type, icon, color, sort_order, is_system, is_active, is_deleted, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    categoryData.user_id,
+                    categoryData.book_category_id, // 新增：插入账本分类ID
+                    categoryData.name,
+                    categoryData.type,
+                    categoryData.icon,
+                    categoryData.color,
+                    categoryData.sort_order,
+                    categoryData.is_system,
+                    categoryData.is_active,
+                    categoryData.is_deleted,
+                    categoryData.created_at,
+                    categoryData.updated_at,
+                ]
+            );
+
+            // 6. 提交事务
+            await connection.commit();
+
+            // 7. 返回创建结果
+            return {
+                code:200,
+                success: true,
+                message: '分类创建成功',
+                data: {
+                    id: (result as any).insertId, // 新增分类ID
+                    ...categoryData,
+                },
+            };
+
+        } catch (error: any) {
+            // 回滚事务
+            await connection.rollback();
+
+            // 兜底处理：捕获数据库唯一键冲突（防止并发漏校验）
+            if (error.code === 'ER_DUP_ENTRY') {
+                const bookTip = validBookId ? `【账本ID:${validBookId}】下` : '';
+                throw new HttpError(`分类名称【${name}】${bookTip}已存在，无法重复创建`, 409);
+            }
+
+            // 其他错误
+            console.error('创建分类失败：', error.message, error.stack);
+            throw new HttpError(`${error.message}`, 403);
+
+        } finally {
+            // 释放连接
+            connection.release();
+        }
     }
 
     /**
@@ -258,7 +376,7 @@ class UserModule {
      * @param categoryId 分类ID
      * @returns 校验结果（是否关联账单）
      */
-    async cateBindBill(categoryId: number, currentUserId: number): Promise<{
+    async cateBindBill(categoryId: number,bookId:number, currentUserId: number): Promise<{
         code: number;
         message: string;
         hasBill: boolean; // true=关联账单，false=无关联
@@ -277,9 +395,9 @@ class UserModule {
             const [billCountRows] = await pool.execute(
                 `SELECT 1
                  FROM mate_bill
-                 WHERE category_id = ?
-                   AND user_id = ? LIMIT 1`,
-                [categoryId, currentUserId]
+                 WHERE category_id = ? book_id= ?
+                   AND user_id = ? AND is_deleted = 0 LIMIT 1`,
+                [categoryId,bookId, currentUserId]
             );
             const hasBill = Array.isArray(billCountRows) && billCountRows.length > 0;
 
@@ -462,6 +580,7 @@ class UserModule {
         type?: 1 | 2 | 3 | number | string,
         bookCategoryId?: number
     ): Promise<any> {
+
         try {
             // 1. 基础参数校验与标准化
             const validUserId = userId !== undefined ? Number(userId) : 0;
@@ -507,8 +626,8 @@ class UserModule {
             const validBookId =
                 bookCategoryId !== undefined ? Number(bookCategoryId) : 0;
             if (Number.isInteger(validBookId) && validBookId > 0) {
-                // whereConditions.push("c.book_id = ?");
-                // queryParams.push(validBookId);
+                whereConditions.push("c.book_category_id = ?");
+                queryParams.push(validBookId);
             }
 
             const whereSql = whereConditions.join(" AND ");

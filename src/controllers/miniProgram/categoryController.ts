@@ -11,10 +11,13 @@ import {
 export const create = async (req: Request, res: Response) => {
   try {
     // @ts-ignore
-    let result = await categoryCreateService(req.body);
+    let result = await categoryCreateService(req,res);
+    console.log(result)
     // @ts-ignore
     return res.status(200).json(result);
-  } catch (err) {}
+  } catch (err) {
+      console.error(err);
+  }
 };
 /**
  * 分类列表
