@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+<<<<<<< HEAD
     "target": "ES2020",
     "module": "ESNext", // 编译为 ES 模块（如果用 CommonJS 则改为 CommonJS）
     "moduleResolution": "Bundler",
@@ -14,3 +15,27 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }
+=======
+    /* 基础配置 */
+    "target": "ES2020",                // 适配Node.js 16+（兼容CommonJS）
+    "module": "CommonJS",              // 模块系统（Express是CommonJS，优先选这个）
+    "moduleResolution": "Node",        // 按Node规则解析模块
+    "rootDir": "./src",                // TS源码目录
+    "outDir": "./dist",                // 编译后JS输出目录
+    "removeComments": true,            // 编译时移除注释
+    "strict": true,                    // 开启严格类型检查（必开！）
+    "esModuleInterop": true,           // 兼容CommonJS/ESM互操作（解决import express报错）
+    "skipLibCheck": true,              // 跳过库类型检查（加速编译）
+    "forceConsistentCasingInFileNames": true, // 强制文件名大小写一致
+    /* 可选配置 */
+    "resolveJsonModule": true,         // 允许导入JSON文件
+    "sourceMap": true,                 // 生成sourceMap（调试时关联TS源码）
+    "baseUrl": "./",                   // 基础路径（方便路径别名）
+    "paths": {                         // 路径别名（可选，简化导入）
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*"],             // 要编译的TS文件（src下所有）
+  "exclude": ["node_modules", "dist"]  // 排除目录
+}
+>>>>>>> 4d9c73e (🐛 修复打包)

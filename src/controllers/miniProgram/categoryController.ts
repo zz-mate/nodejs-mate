@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import {categoryCreateService,categoryListService} from "../../services/miniProgram/categoryService.ts";
 import {billInfoService} from "../../services/miniProgram/billService.ts";
+=======
+import {categoryCreateService,categoryListService} from "../../services/miniProgram/categoryService";
+
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 /**
  * 添加分类

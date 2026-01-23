@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
 import type {BudgetCategoryDbSchema} from "../../types";
 import HttpError from "../../utils/HttpError.ts";
+=======
+import pool from '../../db';
+import type {BudgetCategoryDbSchema} from "../../types";
+import HttpError from "../../utils/HttpError";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 class BudgetCategoryModule {
     budgetCategoryTableName = 'mate_budget_category';

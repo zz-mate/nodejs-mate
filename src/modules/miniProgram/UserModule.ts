@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
 import type {UserDbSchema} from "../../types";
 import {maskPhoneNumber} from "../../utils/tools.ts"
+=======
+import pool from '../../db';
+import type {UserDbSchema} from "../../types";
+import {maskPhoneNumber} from "../../utils/tools"
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 class UserModule {
     userTableName = 'mate_user';

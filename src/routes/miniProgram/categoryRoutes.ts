@@ -1,6 +1,10 @@
 import {Router} from 'express';
 // @ts-ignore
+<<<<<<< HEAD
 import {create, list} from '../../controllers/miniProgram/categoryController.ts';
+=======
+import {create, list} from '../../controllers/miniProgram/categoryController';
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 const router: Router = Router();
 

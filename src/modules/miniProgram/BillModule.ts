@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
 import type {UserDbSchema, BillDbSchema, ApiResponse, PaginationData} from "../../types";
 import {v4 as uuidv4} from "uuid";
 import dayjs from 'dayjs';
 import {formatAmount,parseJsonToArray} from "../../utils/tools.ts"
 import HttpError from '../../utils/HttpError.ts';
+=======
+import pool from '../../db';
+import type {UserDbSchema, BillDbSchema, ApiResponse, PaginationData} from "../../types";
+import {v4 as uuidv4} from "uuid";
+import dayjs from 'dayjs';
+import {formatAmount,parseJsonToArray} from "../../utils/tools"
+import HttpError from '../../utils/HttpError';
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 class BillModule {
     billTableName = 'mate_bill';

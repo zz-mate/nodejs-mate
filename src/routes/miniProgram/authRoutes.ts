@@ -1,6 +1,10 @@
 import {Router} from 'express';
 // @ts-ignore
+<<<<<<< HEAD
 import {loginByPhone,userInfo} from '../../controllers/miniProgram/authController.ts';
+=======
+import {loginByPhone,userInfo} from '../../controllers/miniProgram/authController';
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 const router: Router = Router();
 

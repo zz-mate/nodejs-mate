@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 // @ts-ignore
+<<<<<<< HEAD
 import {userInfoService} from "../../services/miniProgram/userService.ts"
+=======
+import {userInfoService} from "../../services/miniProgram/userService"
+>>>>>>> 4d9c73e (🐛 修复打包)
 export  const  info = async (req:Request,res:Response) => {
     try{
         // @ts-ignore

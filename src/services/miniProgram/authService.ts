@@ -1,6 +1,11 @@
 // @ts-ignore
+<<<<<<< HEAD
 import authModel from "../../modules/miniProgram/AuthModule.ts"
 import {formatDate} from "../../utils/date.ts";
+=======
+import authModel from "../../modules/miniProgram/AuthModule"
+import {formatDate} from "../../utils/date";
+>>>>>>> 4d9c73e (🐛 修复打包)
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'; // 生产环境需更换为强密钥

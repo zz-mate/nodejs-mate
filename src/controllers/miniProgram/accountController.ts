@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import {accountCreateService,accountListService} from "../../services/miniProgram/accountService.ts";
+=======
+import {accountCreateService,accountListService} from "../../services/miniProgram/accountService";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 /**
  * 添加分类

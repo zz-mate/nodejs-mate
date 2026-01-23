@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
 import bcrypt from 'bcrypt';
 import {v4 as uuidv4} from "uuid"; // 核心导入语句
@@ -7,6 +8,15 @@ import HttpStatus from "../../utils/HttpError.ts";
 // @ts-ignore
 import {generateToken} from '../../utils/tokenUtils.ts';
 import HttpError from "../../utils/HttpError.ts";
+=======
+import pool from '../../db';
+import bcrypt from 'bcrypt';
+import {v4 as uuidv4} from "uuid"; // 核心导入语句
+import type {UserDbSchema} from "../../types";
+
+import {generateToken} from '../../utils/tokenUtils';
+import HttpError from "../../utils/HttpError";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 class AuthModule {
     userTableName = 'mate_user';

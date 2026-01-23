@@ -1,5 +1,9 @@
 import type {Request, Response} from "express";
+<<<<<<< HEAD
 import categoryModule from "../../modules/miniProgram/CategoryModule.ts";
+=======
+import categoryModule from "../../modules/miniProgram/CategoryModule";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 export const categoryCreateService = async (data: any) => {
     // @ts-ignore

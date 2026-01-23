@@ -1,7 +1,12 @@
 import type {Request, Response} from "express";
 import type {ApiResponse, BudgetDbSchema} from "../../types";
+<<<<<<< HEAD
 import budgetModule from "../../modules/miniProgram/BudgetModule.ts";
 import {userInfo} from "../../controllers/miniProgram/authController.ts";
+=======
+import budgetModule from "../../modules/miniProgram/BudgetModule";
+
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 interface BudgetRequest extends Request, BudgetDbSchema {
 }

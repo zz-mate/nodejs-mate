@@ -4,7 +4,11 @@ import type{ BillDbSchema} from "../../types"
 interface BillRequest extends Request, BillDbSchema{}
 
 // @ts-ignore
+<<<<<<< HEAD
 import {createBillService,billListService,billRemoveService,billInfoService} from "../../services/miniProgram/billService.ts";
+=======
+import {createBillService,billListService,billRemoveService,billInfoService} from "../../services/miniProgram/billService";
+>>>>>>> 4d9c73e (🐛 修复打包)
 /**
  * 创建账单
  */

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import {bookInfoService,bookListService} from "../../services/miniProgram/bookService.ts";
+=======
+import {bookInfoService,bookListService} from "../../services/miniProgram/bookService";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 
 export const info = async (req: Request, res: Response) => {

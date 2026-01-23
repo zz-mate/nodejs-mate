@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
 import type {BookDbSchema, PaginationData} from "../../types";
 import HttpError from "../../utils/HttpError.ts";
+=======
+import pool from '../../db';
+import type {BookDbSchema, PaginationData} from "../../types";
+import HttpError from "../../utils/HttpError";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 class UserModule {
     bookTableName = 'mate_book';

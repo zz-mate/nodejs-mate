@@ -1,5 +1,9 @@
 // @ts-ignore
+<<<<<<< HEAD
 import {loginByPhoneService, userInfoService} from "../../services/miniProgram/authService.ts";
+=======
+import {loginByPhoneService, userInfoService} from "../../services/miniProgram/authService";
+>>>>>>> 4d9c73e (🐛 修复打包)
 
 interface CustomRequest extends Request {
     user?: {

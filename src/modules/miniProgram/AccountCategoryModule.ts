@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import pool from '../../db/index.ts';
+=======
+import pool from '../../db/';
+>>>>>>> 4d9c73e (🐛 修复打包)
 import type {AccountCategoryDbSchema} from '../../types'
 
 
